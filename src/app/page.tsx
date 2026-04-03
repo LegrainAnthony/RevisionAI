@@ -47,7 +47,7 @@ export default function Home() {
   /** Appelé quand le PDF est rendu en images par PdfUploader */
   const handlePdfRendered = useCallback(async (name: string, pagesBase64: string[]) => {
     setDeckName(name.replace(/\.[^.]+$/, ''));
-    setFileName(name);
+    setFileName(name.replace(/\.[^.]+$/, ''));
     setPages(pagesBase64);
     setSelected(new Array(pagesBase64.length).fill(true));
 
@@ -124,7 +124,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cards: cards.filter((c) => c.selected),
-          deckName: fileName.replace(/\.[^.]+$/, ''),
+          deckName: deckName || fileName.replace(/\.[^.]+$/, ''),
         }),
       });
 
@@ -134,7 +134,7 @@ export default function Home() {
       }
 
       const blob = await res.blob();
-      downloadBlob(blob, `${fileName.replace(/\.[^.]+$/, '')}.txt`);
+      downloadBlob(blob, `${deckName.replace(/\.[^.]+$/, '')}.txt`);
     } catch (err) {
       setError((err as Error).message);
     } finally {

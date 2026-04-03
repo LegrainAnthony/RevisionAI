@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exportToAnkiTxt } from '@/engine/export/ankiExporter';
 import { Card } from '@/shared/types';
-import { log } from 'console';
-
 /**
  * POST /api/export
  *
