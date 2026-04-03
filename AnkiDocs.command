@@ -8,6 +8,18 @@
 # Se placer dans le dossier du script
 cd "$(dirname "$0")"
 
+
+# Mise à jour automatique depuis GitHub
+if command -v git &> /dev/null; then
+    echo "  [UPDATE] Vérification des mises à jour..."
+    git pull origin main 2>/dev/null
+    echo ""
+else
+    echo "  [INFO] Git non installé — mise à jour automatique désactivée."
+    echo ""
+fi
+
+
 echo ""
 echo "  ╔══════════════════════════════════╗"
 echo "  ║         AnkiDocs v2              ║"
