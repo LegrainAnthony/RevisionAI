@@ -34,6 +34,7 @@ export default function Home() {
 
   // ── Résultats ──
   const [cards, setCards] = useState<Card[]>([]);
+  const [deckName, setDeckName] = useState('Default');
   const [costUsd, setCostUsd] = useState(0);
 
   // ── État UI ──
@@ -45,7 +46,8 @@ export default function Home() {
 
   /** Appelé quand le PDF est rendu en images par PdfUploader */
   const handlePdfRendered = useCallback(async (name: string, pagesBase64: string[]) => {
-    setFileName(name);
+    setDeckName(name.replace(/\.[^.]+$/, ''));
+    setFileName(name.replace(/\.[^.]+$/, ''));
     setPages(pagesBase64);
     setSelected(new Array(pagesBase64.length).fill(true));
 
@@ -122,7 +124,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cards: cards.filter((c) => c.selected),
-          deckName: fileName.replace(/\.[^.]+$/, ''),
+          deckName: deckName || fileName.replace(/\.[^.]+$/, ''),
         }),
       });
 
@@ -132,7 +134,7 @@ export default function Home() {
       }
 
       const blob = await res.blob();
-      downloadBlob(blob, `${fileName.replace(/\.[^.]+$/, '')}.txt`);
+      downloadBlob(blob, `${deckName.replace(/\.[^.]+$/, '')}.txt`);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -241,14 +243,16 @@ export default function Home() {
 
       {/* ── Étape 3 : Résultats ── */}
       {step === 'results' && (
-        <CardResults
-          cards={cards}
-          costUsd={costUsd}
-          onUpdate={setCards}
-          onExport={handleExport}
-          onReset={handleReset}
-          exporting={exporting}
-        />
+      <CardResults
+        cards={cards}
+        costUsd={costUsd}
+        deckName={deckName}
+        onDeckNameChange={setDeckName}
+        onUpdate={setCards}
+        onExport={handleExport}
+        onReset={handleReset}
+        exporting={exporting}
+      />
       )}
     </main>
   );

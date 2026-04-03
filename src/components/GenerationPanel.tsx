@@ -52,14 +52,14 @@ export function GenerationPanel({
         </div>
         <input
           type="range"
-          min={2}
+          min={1}
           max={10}
           value={cardsPerChunk}
           onChange={(e) => onCardsPerChunkChange(Number(e.target.value))}
           className="w-full accent-[var(--accent)]"
         />
         <div className="flex justify-between text-[10px] text-[var(--text-muted)] mt-1">
-          <span>2 (précis)</span>
+          <span>1 (précis)</span>
           <span>10 (large)</span>
         </div>
       </div>

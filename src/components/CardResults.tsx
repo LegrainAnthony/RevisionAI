@@ -6,6 +6,8 @@ import { Card } from '@/shared/types';
 interface Props {
   cards: Card[];
   costUsd: number;
+  deckName: string;
+  onDeckNameChange: (name: string) => void;
   onUpdate: (cards: Card[]) => void;
   onExport: () => void;
   onReset: () => void;
@@ -15,7 +17,7 @@ interface Props {
 /**
  * Affiche les cartes générées avec édition, sélection, images, et mode basic/reverse.
  */
-export function CardResults({ cards, costUsd, onUpdate, onExport, onReset, exporting }: Props) {
+export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpdate, onExport, onReset, exporting }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const selectedCount = cards.filter((c) => c.selected).length;
 
@@ -91,6 +93,20 @@ export function CardResults({ cards, costUsd, onUpdate, onExport, onReset, expor
             onRemoveImage={(side, idx) => removeImage(card.id, side, idx)}
           />
         ))}
+      </div>
+
+      {/* Nom du deck */}
+      <div className="bg-[var(--bg-card)] rounded-xl p-4 border border-[var(--border)]">
+        <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide block mb-1">
+          Nom du deck Anki
+        </label>
+        <input
+          type="text"
+          value={deckName}
+          onChange={(e) => onDeckNameChange(e.target.value)}
+          placeholder="Ex: Anatomie membre superieur"
+          className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--accent)]"
+        />
       </div>
 
       {/* Actions */}
