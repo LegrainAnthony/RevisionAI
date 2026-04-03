@@ -11,13 +11,13 @@ import { Card } from '@/shared/types';
  *   Fichier → Importer → sélectionner le .txt
  *   Cocher "Autoriser le HTML dans les champs"
  */
-export function exportToAnkiTxt(cards: Card[]): string {
+export function exportToAnkiTxt(cards: Card[], deckName: string): string {
   const lines: string[] = [];
 
   lines.push('#separator:tab');
   lines.push('#html:true');
   lines.push('#columns:Front\tBack\tTags');
-  lines.push('#deck:AnkiDocs');
+  lines.push(`#deck:${deckName}`);
 
 for (const card of cards) {
   const front = escapeField(formatFront(card));

@@ -35,7 +35,7 @@ export function PageSelector({ pages, selected, pagesPerChunk, onToggle, onChunk
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-[var(--text-muted)] mr-2">Pages / chunk :</span>
-          {[2, 3, 4, 5, 6].map((n) => (
+          {[1, 2, 3, 4, 5, 6].map((n) => (
             <button
               key={n}
               onClick={() => onChunkSizeChange(n)}
