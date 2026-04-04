@@ -24,6 +24,7 @@ export interface AppSettings {
   cardsPerChunk: number;
   activeProfileId: string;
   customProfiles: PromptProfile[];
+  exportTags: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -34,6 +35,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cardsPerChunk: 5,
   activeProfileId: 'general',
   customProfiles: [],
+  exportTags: false,
 };
 
 // ─── Cartes Anki (éphémères — pas stockées) ─────────────────

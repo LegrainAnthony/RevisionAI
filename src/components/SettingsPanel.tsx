@@ -297,6 +297,25 @@ export function SettingsPanel({ settings, onUpdate, onClose }: Props) {
               </div>
             </Setting>
 
+            <Divider />
+
+            {/* ── Tags Anki ── */}
+            <Setting
+              title="Ajouter des tags dans l'export Anki"
+              description="Quand cette option est activée, chaque carte exportée reçoit des tags Anki automatiques (type de carte, difficulté, section source). Les tags permettent de filtrer et d'organiser les cartes dans Anki. Désactivé par défaut pour garder un deck propre."
+            >
+              <button
+                onClick={() => onUpdate({ exportTags: !settings.exportTags })}
+                className={`mt-2 w-10 h-5 rounded-full transition-colors flex items-center px-0.5 ${
+                  settings.exportTags ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'
+                }`}
+              >
+                <span className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                  settings.exportTags ? 'translate-x-5' : 'translate-x-0'
+                }`} />
+              </button>
+            </Setting>
+
           </div>
 
           {/* Footer */}

@@ -19,13 +19,14 @@ import { AppSettings, GenerationConfig, GenerationRecord } from '@/shared/types'
  */
 export async function POST(request: NextRequest) {
   try {
-    const { hash, fileName, pageCount, images, config, settings } = await request.json() as {
+    const { hash, fileName, pageCount, images, config, settings, chunkCardOverrides } = await request.json() as {
       hash: string;
       fileName: string;
       pageCount: number;
       images: string[];
       config: GenerationConfig;
       settings?: AppSettings;
+      chunkCardOverrides?: Record<number, number>;
     };
 
     if (!hash || !images?.length || !config) {
@@ -54,7 +55,8 @@ export async function POST(request: NextRequest) {
       previousCards,
       aiOverrides,
       settings?.activeProfileId,
-      settings?.customProfiles
+      settings?.customProfiles,
+      chunkCardOverrides
     );
 
     // Sauvegarder dans l'historique

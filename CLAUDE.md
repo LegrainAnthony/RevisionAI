@@ -40,7 +40,7 @@ AnkiDocs transforms a PDF into Anki flashcards using AI vision. The key design d
 1. User uploads PDF → browser renders pages to PNG via `pdfjs-dist`
 2. User selects pages + config → client POSTs `{ hash, images[], config, settings }` to `/api/generate`
 3. Server resolves AI provider/model/key from `settings` (falls back to env vars)
-4. Server splits images into batches of `settings.pagesPerBatch`, calls AI vision per batch using the active prompt profile
+4. Server splits images into batches of `settings.pagesPerBatch`, calls AI vision per batch using the active prompt profile. Each batch uses `chunkCardOverrides[i]` if set, otherwise `settings.cardsPerChunk`.
 5. Each card is tagged with `sourcePages` (the page numbers of the batch it was generated from)
 6. Cards + usage stats returned to client
 7. User reviews/edits cards → exports via `/api/export` as Anki `.txt` (tab-separated, HTML-enabled)
@@ -61,7 +61,7 @@ AnkiDocs transforms a PDF into Anki flashcards using AI vision. The key design d
 | `src/app/api/export/route.ts` | POST `/api/export` — returns `.txt` file |
 | `src/app/page.tsx` | Main page, state orchestration, passes `settings` to all API calls |
 | `src/components/PdfUploader.tsx` | PDF upload + client-side rendering to base64 PNG |
-| `src/components/PageSelector.tsx` | Page grid with chunk size control |
+| `src/components/PageSelector.tsx` | Page grid with chunk size control and per-chunk card count override |
 | `src/components/GenerationPanel.tsx` | Right-side panel: cards/chunk, difficulty, generate button |
 | `src/components/CardResults.tsx` | Card list with edit, drag-and-drop, image upload, source page badge |
 | `src/components/SettingsPanel.tsx` | Settings modal: prompt profiles, AI provider, API key, model, batch params |
@@ -122,6 +122,7 @@ Stored in `localStorage` under the key `ankidocs_settings`.
 | `cardsPerChunk` | `5` | Cards generated per batch |
 | `activeProfileId` | `'general'` | ID of the active prompt profile |
 | `customProfiles` | `[]` | User-created `PromptProfile[]` |
+| `exportTags` | `false` | Include Anki tags (type, difficulty, sourceSection) in export. Off by default. |
 
 ## Adding a new AI provider
 
@@ -134,3 +135,7 @@ Stored in `localStorage` under the key `ankidocs_settings`.
 ## Export format
 
 Cards export as Anki-importable `.txt` (tab-separated, `#html:true`). Images attached by the user are embedded as base64 `<img>` tags. Cards with `cardMode: 'reverse'` get a second reversed line in the export.
+
+By default **no tags are added** to exported cards. When `settings.exportTags = true`, each card gets tags for `type`, `difficulty`, and `sourceSection` (spaces replaced by `_`). The `exportToAnkiTxt` function in `ankiExporter.ts` accepts an `includeTags` boolean parameter.
+
+List items in card text (`- item`, `* item`, `• item`, `1. item`) are automatically converted to `<ul><li>` HTML before export so they render as proper vertical lists in Anki. This is handled by `renderLists()` in `ankiExporter.ts`, applied to both the front and back of each card.
