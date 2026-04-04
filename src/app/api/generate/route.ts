@@ -48,7 +48,14 @@ export async function POST(request: NextRequest) {
     } : undefined;
 
     // Générer
-    const result = await generateCards(images, config, previousCards, aiOverrides);
+    const result = await generateCards(
+      images,
+      config,
+      previousCards,
+      aiOverrides,
+      settings?.activeProfileId,
+      settings?.customProfiles
+    );
 
     // Sauvegarder dans l'historique
     const provider = settings?.provider || process.env.AI_PROVIDER || 'gemini';

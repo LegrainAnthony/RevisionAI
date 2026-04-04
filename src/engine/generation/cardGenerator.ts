@@ -1,4 +1,4 @@
-import { Card, GenerationConfig } from '@/shared/types';
+import { Card, GenerationConfig, PromptProfile } from '@/shared/types';
 import { callVision, estimateCost, AiOverrides } from '@/engine/ai/aiClient';
 import { buildCardPrompt } from '@/engine/ai/prompts';
 import { CONFIG } from '@/shared/config';
@@ -23,7 +23,9 @@ export async function generateCards(
   pagesBase64: string[],
   config: GenerationConfig,
   previousCards: Card[],
-  aiOverrides?: AiOverrides & { pagesPerBatch?: number; cardsPerChunk?: number }
+  aiOverrides?: AiOverrides & { pagesPerBatch?: number; cardsPerChunk?: number },
+  promptProfileId?: string,
+  customProfiles?: PromptProfile[]
 ): Promise<CardResult> {
   const pagesPerBatch = aiOverrides?.pagesPerBatch ?? CONFIG.pagesPerBatch;
   const batches = splitBatches(pagesBase64, pagesPerBatch);
@@ -41,7 +43,7 @@ export async function generateCards(
   let totalOut = 0;
 
   for (let i = 0; i < batches.length; i++) {
-    const prompt = buildCardPrompt(perBatch, config.difficulty, [...previousCards, ...allCards]);
+    const prompt = buildCardPrompt(perBatch, config.difficulty, [...previousCards, ...allCards], promptProfileId, customProfiles);
 
     try {
       const res = await callVision(prompt, batches[i], undefined, aiOverrides);
