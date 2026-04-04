@@ -1,3 +1,19 @@
+// ─── Profils de prompt ────────────────────────────────────────
+
+export interface PromptProfile {
+  id: string;
+  name: string;
+  // Profils prédéfinis : ces champs sont ignorés (prompt codé en dur)
+  // Profils custom : ces champs construisent le prompt dynamiquement
+  context: string;        // Qui suis-je / quel est mon cours
+  rules: string;          // Ce que l'IA DOIT faire
+  recommendations: string;// Ce que l'IA DEVRAIT privilégier
+  forbidden: string;      // Ce que l'IA NE DOIT PAS faire
+}
+
+export const PREDEFINED_PROFILE_IDS = ['general', 'kine', 'info', 'vente', 'langues'] as const;
+export type PredefinedProfileId = typeof PREDEFINED_PROFILE_IDS[number];
+
 // ─── Paramètres utilisateur ──────────────────────────────────
 
 export interface AppSettings {
@@ -6,6 +22,9 @@ export interface AppSettings {
   model: string;
   pagesPerBatch: number;
   cardsPerChunk: number;
+  activeProfileId: string;
+  customProfiles: PromptProfile[];
+  exportTags: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -14,6 +33,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   model: 'gemini-2.5-flash',
   pagesPerBatch: 1,
   cardsPerChunk: 5,
+  activeProfileId: 'general',
+  customProfiles: [],
+  exportTags: false,
 };
 
 // ─── Cartes Anki (éphémères — pas stockées) ─────────────────
@@ -63,31 +85,6 @@ export interface GenerationConfig {
   quizCount: number;
   difficulty: Difficulty | 'mixed';
   selectedPages: number[];
-}
-
-// ─── Cache ───────────────────────────────────────────────────
-
-export interface DocumentMeta {
-  hash: string;
-  fileName: string;
-  pageCount: number;
-  createdAt: string;
-  costs: {
-    total: number;
-    history: { id: string; cost: number; date: string }[];
-  };
-}
-
-export interface GenerationRecord {
-  id: string;
-  mode: GenerationMode;
-  cards: Card[];
-  quizzes: Quiz[];
-  selectedPages: number[];
-  costUsd: number;
-  provider: string;
-  model: string;
-  createdAt: string;
 }
 
 // ─── API ─────────────────────────────────────────────────────

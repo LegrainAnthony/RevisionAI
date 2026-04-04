@@ -31,6 +31,7 @@ export default function Home() {
 
   // ── Configuration ──
   const [difficulty, setDifficulty] = useState<Difficulty | 'mixed'>('mixed');
+  const [chunkCardOverrides, setChunkCardOverrides] = useState<Record<number, number>>({});
 
   // ── Résultats ──
   const [cards, setCards] = useState<Card[]>([]);
@@ -81,25 +82,23 @@ export default function Home() {
         return;
       }
 
-      const chunkCount = Math.ceil(selectedImages.length / settings.pagesPerBatch);
-      const totalCards = chunkCount * settings.cardsPerChunk;
+      const total = computeTotalCards();
+      const batchOverrides = resolveBatchOverrides(selectedIndices);
 
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          hash: pdfHash,
-          fileName,
-          pageCount: pages.length,
           images: selectedImages,
           config: {
             mode: 'cards' as GenerationMode,
-            cardCount: totalCards,
+            cardCount: total,
             quizCount: 0,
             difficulty,
             selectedPages: selectedIndices.map((i) => i + 1), // 1-indexed
           },
           settings,
+          chunkCardOverrides: batchOverrides,
         }),
       });
 
@@ -126,6 +125,7 @@ export default function Home() {
         body: JSON.stringify({
           cards: cards.filter((c) => c.selected),
           deckName: deckName || fileName.replace(/\.[^.]+$/, ''),
+          exportTags: settings.exportTags,
         }),
       });
 
@@ -143,6 +143,15 @@ export default function Home() {
     }
   }
 
+  function handleChunkOverride(chunkIndex: number, value: number | null) {
+    setChunkCardOverrides((prev) => {
+      const next = { ...prev };
+      if (value === null) delete next[chunkIndex];
+      else next[chunkIndex] = value;
+      return next;
+    });
+  }
+
   /** Retour au début */
   function handleReset() {
     setStep('upload');
@@ -151,11 +160,50 @@ export default function Home() {
     setCards([]);
     setCostUsd(0);
     setError(null);
+    setChunkCardOverrides({});
   }
 
   // ── Rendu ──────────────────────────────────────────────────
 
   const selectedCount = selected.filter(Boolean).length;
+
+  /**
+   * Total de cartes estimé en itérant sur les chunks visuels (basés sur pages.length),
+   * en ne comptant que ceux qui ont au moins une page sélectionnée.
+   */
+  function computeTotalCards(): number {
+    const pagesPerBatch = settings.pagesPerBatch;
+    const uiChunkCount = Math.ceil(pages.length / pagesPerBatch);
+    let total = 0;
+    for (let i = 0; i < uiChunkCount; i++) {
+      const start = i * pagesPerBatch;
+      const end = Math.min(start + pagesPerBatch, pages.length);
+      const hasSelected = selected.slice(start, end).some(Boolean);
+      if (hasSelected) {
+        total += chunkCardOverrides[i] ?? settings.cardsPerChunk;
+      }
+    }
+    return total;
+  }
+
+  /**
+   * Convertit les overrides indexés par chunk visuel en overrides indexés par
+   * batch séquentiel (basé sur les pages sélectionnées uniquement).
+   */
+  function resolveBatchOverrides(selectedIndices: number[]): Record<number, number> {
+    const pagesPerBatch = settings.pagesPerBatch;
+    const result: Record<number, number> = {};
+    for (let batchIdx = 0; batchIdx * pagesPerBatch < selectedIndices.length; batchIdx++) {
+      const firstPage = selectedIndices[batchIdx * pagesPerBatch];
+      const uiChunkIdx = Math.floor(firstPage / pagesPerBatch);
+      if (chunkCardOverrides[uiChunkIdx] !== undefined) {
+        result[batchIdx] = chunkCardOverrides[uiChunkIdx];
+      }
+    }
+    return result;
+  }
+
+  const totalCards = computeTotalCards();
 
   return (
     <main className="min-h-screen px-4 py-10 max-w-6xl mx-auto">
@@ -240,8 +288,11 @@ export default function Home() {
               pages={pages}
               selected={selected}
               pagesPerChunk={settings.pagesPerBatch}
+              defaultCardsPerChunk={settings.cardsPerChunk}
+              chunkCardOverrides={chunkCardOverrides}
               onToggle={togglePage}
               onChunkSizeChange={(val) => updateSettings({ pagesPerBatch: val })}
+              onChunkOverride={handleChunkOverride}
             />
           </div>
 
@@ -251,6 +302,7 @@ export default function Home() {
               selectedPageCount={selectedCount}
               pagesPerChunk={settings.pagesPerBatch}
               cardsPerChunk={settings.cardsPerChunk}
+              totalCards={totalCards}
               difficulty={difficulty}
               provider={settings.provider}
               onCardsPerChunkChange={(val) => updateSettings({ cardsPerChunk: val })}

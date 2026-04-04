@@ -6,6 +6,7 @@ interface Props {
   selectedPageCount: number;
   pagesPerChunk: number;
   cardsPerChunk: number;
+  totalCards: number;
   difficulty: Difficulty | 'mixed';
   provider: 'openai' | 'gemini';
   onCardsPerChunkChange: (n: number) => void;
@@ -29,6 +30,7 @@ export function GenerationPanel({
   selectedPageCount,
   pagesPerChunk,
   cardsPerChunk,
+  totalCards,
   difficulty,
   provider,
   onCardsPerChunkChange,
@@ -37,7 +39,6 @@ export function GenerationPanel({
   loading,
 }: Props) {
   const chunkCount = Math.ceil(selectedPageCount / pagesPerChunk);
-  const totalCards = chunkCount * cardsPerChunk;
   const cost = estimateCostClient(selectedPageCount, totalCards, provider);
 
   return (

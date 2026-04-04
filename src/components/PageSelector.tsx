@@ -4,16 +4,23 @@ interface Props {
   pages: string[];
   selected: boolean[];
   pagesPerChunk: number;
+  defaultCardsPerChunk: number;
+  chunkCardOverrides: Record<number, number>;
   onToggle: (index: number) => void;
   onChunkSizeChange: (n: number) => void;
+  onChunkOverride: (chunkIndex: number, value: number | null) => void;
 }
 
 /**
  * Affiche les pages du PDF regroupées en chunks.
  * Cliquer sur une page la désélectionne (elle ne sera pas traitée).
  * Le slider ajuste le nombre de pages par chunk.
+ * Chaque chunk peut avoir un nombre de cartes personnalisé.
  */
-export function PageSelector({ pages, selected, pagesPerChunk, onToggle, onChunkSizeChange }: Props) {
+export function PageSelector({
+  pages, selected, pagesPerChunk, defaultCardsPerChunk,
+  chunkCardOverrides, onToggle, onChunkSizeChange, onChunkOverride,
+}: Props) {
   const selectedCount = selected.filter(Boolean).length;
   const chunkCount = Math.ceil(selectedCount / pagesPerChunk);
 
@@ -54,17 +61,56 @@ export function PageSelector({ pages, selected, pagesPerChunk, onToggle, onChunk
       {/* Chunks */}
       {chunks.map((chunkIndices, ci) => {
         const chunkSelected = chunkIndices.filter((i) => selected[i]).length;
+        const override = chunkCardOverrides[ci];
+        const cardCount = override ?? defaultCardsPerChunk;
+        const hasOverride = override !== undefined;
 
         return (
-          <div key={ci} className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] p-3">
+          <div
+            key={ci}
+            className={`rounded-xl border bg-[var(--bg-card)] p-3 ${
+              hasOverride ? 'border-[var(--accent)]/50' : 'border-[var(--border)]'
+            }`}
+          >
             <div className="flex items-center justify-between mb-2 px-1">
               <span className="text-[11px] font-semibold tracking-wide uppercase text-[var(--text-muted)]">
                 Chunk {ci + 1}
               </span>
-              <span className="text-[11px] text-[var(--accent)]">
-                {chunkSelected} page{chunkSelected !== 1 ? 's' : ''}
-              </span>
+
+              {/* Contrôle cartes par chunk */}
+              <div className="flex items-center gap-1.5">
+                {hasOverride && (
+                  <button
+                    onClick={() => onChunkOverride(ci, null)}
+                    className="text-[9px] text-[var(--text-muted)] hover:text-[var(--danger)] px-1"
+                    title="Réinitialiser au défaut"
+                  >
+                    ✕
+                  </button>
+                )}
+                <button
+                  onClick={() => onChunkOverride(ci, Math.max(1, cardCount - 1))}
+                  className="w-5 h-5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text)] text-xs font-bold leading-none"
+                >
+                  −
+                </button>
+                <span className={`text-[11px] font-semibold min-w-[4rem] text-center ${
+                  hasOverride ? 'text-[var(--accent)]' : 'text-[var(--text-muted)]'
+                }`}>
+                  {cardCount} carte{cardCount !== 1 ? 's' : ''}
+                </span>
+                <button
+                  onClick={() => onChunkOverride(ci, Math.min(20, cardCount + 1))}
+                  className="w-5 h-5 rounded bg-[var(--bg-hover)] text-[var(--text-muted)] hover:text-[var(--text)] text-xs font-bold leading-none"
+                >
+                  +
+                </button>
+                <span className="text-[11px] text-[var(--accent)] ml-1">
+                  · {chunkSelected} page{chunkSelected !== 1 ? 's' : ''}
+                </span>
+              </div>
             </div>
+
             <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
               {chunkIndices.map((pageIdx) => (
                 <button

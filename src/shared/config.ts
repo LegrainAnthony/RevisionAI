@@ -9,13 +9,10 @@ export const CONFIG = {
   geminiApiKey: env('GEMINI_API_KEY', ''),
 
   /** Nombre de pages par chunk (défaut) */
-  pagesPerBatch: 1,
+  pagesPerBatch: 4,
 
   /** Nombre de cartes à générer par chunk */
   cardsPerChunk: 5,
-
-  /** Dossier de cache */
-  cacheDir: env('CACHE_DIR', './data/cache'),
 
   /** Taille max de fichier (MB) */
   maxFileSizeMb: 50,

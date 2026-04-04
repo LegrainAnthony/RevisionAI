@@ -9,9 +9,10 @@ import { Card } from '@/shared/types';
  */
 export async function POST(request: NextRequest) {
   try {
-    const { cards, deckName } = (await request.json()) as {
+    const { cards, deckName, exportTags } = (await request.json()) as {
       cards: Card[];
       deckName: string;
+      exportTags?: boolean;
     };
 
     const selected = (cards || []).filter((c) => c.selected);
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Aucune carte sélectionnée' }, { status: 400 });
     }
 
-    const txt = exportToAnkiTxt(selected, deckName);
+    const txt = exportToAnkiTxt(selected, deckName, exportTags ?? false);
     const fileName = `${deckName || 'AnkiDocs'}.txt`;
 
     return new NextResponse(Buffer.from(txt, 'utf-8'), {
