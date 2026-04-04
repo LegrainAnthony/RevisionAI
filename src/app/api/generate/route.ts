@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateCards } from '@/engine/generation/cardGenerator';
 import { cache } from '@/cache/cacheManager';
-import { GenerationConfig, GenerationRecord } from '@/shared/types';
+import { AppSettings, GenerationConfig, GenerationRecord } from '@/shared/types';
 
 /**
  * POST /api/generate
@@ -19,7 +19,14 @@ import { GenerationConfig, GenerationRecord } from '@/shared/types';
  */
 export async function POST(request: NextRequest) {
   try {
-    const { hash, fileName, pageCount, images, config } = await request.json();
+    const { hash, fileName, pageCount, images, config, settings } = await request.json() as {
+      hash: string;
+      fileName: string;
+      pageCount: number;
+      images: string[];
+      config: GenerationConfig;
+      settings?: AppSettings;
+    };
 
     if (!hash || !images?.length || !config) {
       return NextResponse.json({ error: 'hash, images et config requis' }, { status: 400 });
@@ -31,10 +38,20 @@ export async function POST(request: NextRequest) {
     // Charger l'historique pour la déduplication
     const previousCards = await cache.getPreviousCards(hash);
 
+    // Construire les overrides depuis les settings client (si fournis)
+    const aiOverrides = settings ? {
+      provider: settings.provider,
+      apiKey: settings.apiKey || undefined,
+      model: settings.model || undefined,
+      pagesPerBatch: settings.pagesPerBatch,
+      cardsPerChunk: settings.cardsPerChunk,
+    } : undefined;
+
     // Générer
-    const result = await generateCards(images, config, previousCards);
+    const result = await generateCards(images, config, previousCards, aiOverrides);
 
     // Sauvegarder dans l'historique
+    const provider = settings?.provider || process.env.AI_PROVIDER || 'gemini';
     const record: GenerationRecord = {
       id: `gen-${Date.now()}`,
       mode: config.mode,
@@ -42,8 +59,8 @@ export async function POST(request: NextRequest) {
       quizzes: [],
       selectedPages: config.selectedPages,
       costUsd: result.costUsd,
-      provider: process.env.AI_PROVIDER || 'gemini',
-      model: process.env.AI_MODEL || 'gemini-2.5-flash',
+      provider,
+      model: settings?.model || process.env.AI_MODEL || 'gemini-2.5-flash',
       createdAt: new Date().toISOString(),
     };
     await cache.saveGeneration(hash, record);

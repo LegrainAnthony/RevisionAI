@@ -1,5 +1,5 @@
 import { Card, GenerationConfig } from '@/shared/types';
-import { callVision, estimateCost } from '@/engine/ai/aiClient';
+import { callVision, estimateCost, AiOverrides } from '@/engine/ai/aiClient';
 import { buildCardPrompt } from '@/engine/ai/prompts';
 import { CONFIG } from '@/shared/config';
 
@@ -22,10 +22,19 @@ interface CardResult {
 export async function generateCards(
   pagesBase64: string[],
   config: GenerationConfig,
-  previousCards: Card[]
+  previousCards: Card[],
+  aiOverrides?: AiOverrides & { pagesPerBatch?: number; cardsPerChunk?: number }
 ): Promise<CardResult> {
-  const batches = splitBatches(pagesBase64, CONFIG.pagesPerBatch);
-  const perBatch = Math.max(1, Math.ceil(config.cardCount / batches.length));
+  const pagesPerBatch = aiOverrides?.pagesPerBatch ?? CONFIG.pagesPerBatch;
+  const batches = splitBatches(pagesBase64, pagesPerBatch);
+  const perBatch = aiOverrides?.cardsPerChunk ?? Math.max(1, Math.ceil(config.cardCount / batches.length));
+
+  // Associer chaque batch aux numéros de pages réels
+  const pageNumbers = config.selectedPages;
+  const batchPageNumbers = batches.map((_, i) => {
+    const start = i * pagesPerBatch;
+    return pageNumbers.slice(start, start + pagesPerBatch);
+  });
 
   const allCards: Card[] = [];
   let totalIn = 0;
@@ -35,10 +44,10 @@ export async function generateCards(
     const prompt = buildCardPrompt(perBatch, config.difficulty, [...previousCards, ...allCards]);
 
     try {
-      const res = await callVision(prompt, batches[i]);
+      const res = await callVision(prompt, batches[i], undefined, aiOverrides);
       totalIn += res.inputTokens;
       totalOut += res.outputTokens;
-      allCards.push(...parseCards(res.text));
+      allCards.push(...parseCards(res.text, batchPageNumbers[i]));
     } catch (err) {
       console.error(`[CardGen] Lot ${i + 1}/${batches.length} échoué :`, (err as Error).message);
     }
@@ -52,11 +61,11 @@ export async function generateCards(
     })),
     inputTokens: totalIn,
     outputTokens: totalOut,
-    costUsd: estimateCost(totalIn, totalOut),
+    costUsd: estimateCost(totalIn, totalOut, aiOverrides?.provider),
   };
 }
 
-function parseCards(text: string): Card[] {
+function parseCards(text: string, sourcePages: number[] = []): Card[] {
   try {
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const data = JSON.parse(cleaned);
@@ -68,6 +77,7 @@ function parseCards(text: string): Card[] {
       type: c.type || 'definition',
       difficulty: c.difficulty || 'medium',
       sourceSection: c.sourceSection || '',
+      sourcePages,
       selected: true,
       frontImages: [],  // Vides — l'utilisateur les ajoute manuellement
       backImages: [],

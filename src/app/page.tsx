@@ -6,18 +6,20 @@ import { PdfUploader } from '@/components/PdfUploader';
 import { PageSelector } from '@/components/PageSelector';
 import { GenerationPanel } from '@/components/GenerationPanel';
 import { CardResults } from '@/components/CardResults';
+import { SettingsPanel } from '@/components/SettingsPanel';
+import { useSettings } from '@/hooks/useSettings';
 
 // ─── Types locaux ────────────────────────────────────────────
 
 type Step = 'upload' | 'configure' | 'results';
 
-// Provider par défaut — lu depuis un meta tag ou hardcodé
-// (la vraie valeur est côté serveur dans .env)
-const DEFAULT_PROVIDER = 'gemini';
-
 // ─── Page principale ─────────────────────────────────────────
 
 export default function Home() {
+  // ── Paramètres utilisateur ──
+  const { settings, updateSettings } = useSettings();
+  const [showSettings, setShowSettings] = useState(false);
+
   // ── Étape courante ──
   const [step, setStep] = useState<Step>('upload');
 
@@ -28,8 +30,6 @@ export default function Home() {
   const [selected, setSelected] = useState<boolean[]>([]);   // sélection par page
 
   // ── Configuration ──
-  const [pagesPerChunk, setPagesPerChunk] = useState(4);
-  const [cardsPerChunk, setCardsPerChunk] = useState(5);
   const [difficulty, setDifficulty] = useState<Difficulty | 'mixed'>('mixed');
 
   // ── Résultats ──
@@ -81,8 +81,8 @@ export default function Home() {
         return;
       }
 
-      const chunkCount = Math.ceil(selectedImages.length / pagesPerChunk);
-      const totalCards = chunkCount * cardsPerChunk;
+      const chunkCount = Math.ceil(selectedImages.length / settings.pagesPerBatch);
+      const totalCards = chunkCount * settings.cardsPerChunk;
 
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -99,6 +99,7 @@ export default function Home() {
             difficulty,
             selectedPages: selectedIndices.map((i) => i + 1), // 1-indexed
           },
+          settings,
         }),
       });
 
@@ -159,14 +160,34 @@ export default function Home() {
   return (
     <main className="min-h-screen px-4 py-10 max-w-6xl mx-auto">
       {/* Header */}
-      <header className="text-center mb-10">
-        <h1 className="text-3xl font-bold tracking-tight">
-          <span className="text-[var(--accent)]">Anki</span>Docs
-        </h1>
-        <p className="text-[var(--text-muted)] text-sm mt-1">
-          PDF → Cartes Anki via IA vision
-        </p>
+      <header className="flex items-center justify-between mb-10">
+        <div className="flex-1" />
+        <div className="text-center">
+          <h1 className="text-3xl font-bold tracking-tight">
+            <span className="text-[var(--accent)]">Anki</span>Docs
+          </h1>
+          <p className="text-[var(--text-muted)] text-sm mt-1">
+            PDF → Cartes Anki via IA vision
+          </p>
+        </div>
+        <div className="flex-1 flex justify-end">
+          <button
+            onClick={() => setShowSettings(true)}
+            className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-card)] transition-colors"
+            title="Paramètres"
+          >
+            ⚙
+          </button>
+        </div>
       </header>
+
+      {showSettings && (
+        <SettingsPanel
+          settings={settings}
+          onUpdate={updateSettings}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
 
       {/* Barre de progression */}
       <div className="flex items-center justify-center gap-3 mb-8">
@@ -218,9 +239,9 @@ export default function Home() {
             <PageSelector
               pages={pages}
               selected={selected}
-              pagesPerChunk={pagesPerChunk}
+              pagesPerChunk={settings.pagesPerBatch}
               onToggle={togglePage}
-              onChunkSizeChange={setPagesPerChunk}
+              onChunkSizeChange={(val) => updateSettings({ pagesPerBatch: val })}
             />
           </div>
 
@@ -228,11 +249,11 @@ export default function Home() {
           <div className="lg:sticky lg:top-6 lg:self-start">
             <GenerationPanel
               selectedPageCount={selectedCount}
-              pagesPerChunk={pagesPerChunk}
-              cardsPerChunk={cardsPerChunk}
+              pagesPerChunk={settings.pagesPerBatch}
+              cardsPerChunk={settings.cardsPerChunk}
               difficulty={difficulty}
-              provider={DEFAULT_PROVIDER}
-              onCardsPerChunkChange={setCardsPerChunk}
+              provider={settings.provider}
+              onCardsPerChunkChange={(val) => updateSettings({ cardsPerChunk: val })}
               onDifficultyChange={setDifficulty}
               onGenerate={handleGenerate}
               loading={generating}
