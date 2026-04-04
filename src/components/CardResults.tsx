@@ -19,7 +19,33 @@ interface Props {
  */
 export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpdate, onExport, onReset, exporting }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const selectedCount = cards.filter((c) => c.selected).length;
+
+  function handleDragStart(index: number) {
+    setDragIndex(index);
+  }
+
+  function handleDragOver(index: number) {
+    if (dragIndex === null || dragIndex === index) return;
+    setDragOverIndex(index);
+  }
+
+  function handleDrop(index: number) {
+    if (dragIndex === null || dragIndex === index) return;
+    const reordered = [...cards];
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(index, 0, moved);
+    onUpdate(reordered);
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }
+
+  function handleDragEnd() {
+    setDragIndex(null);
+    setDragOverIndex(null);
+  }
 
   function toggleCard(id: string) {
     onUpdate(cards.map((c) => c.id === id ? { ...c, selected: !c.selected } : c));
@@ -37,6 +63,23 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
 
   function selectAll(val: boolean) {
     onUpdate(cards.map((c) => ({ ...c, selected: val })));
+  }
+
+  function addManualCard() {
+    const newCard: Card = {
+      id: `manual-${Date.now()}`,
+      question: '',
+      answer: '',
+      type: 'definition',
+      difficulty: 'medium',
+      sourceSection: '',
+      selected: true,
+      frontImages: [],
+      backImages: [],
+      cardMode: 'basic',
+    };
+    onUpdate([...cards, newCard]);
+    setEditingId(newCard.id);
   }
 
   function addImage(cardId: string, side: 'front' | 'back', base64: string) {
@@ -59,7 +102,17 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
       <div className="flex items-center justify-between bg-[var(--bg-card)] rounded-xl p-4 border border-[var(--border)]">
         <div>
           <p className="text-sm font-medium">{selectedCount} / {cards.length} cartes sélectionnées</p>
-          <p className="text-xs text-[var(--text-muted)]">Coût de cette génération : ${costUsd.toFixed(4)}</p>
+<p className="text-xs text-[var(--text-muted)]">
+  Coût
+    <span className="text-red-500 font-semibold">
+    réel
+  </span>
+   de cette génération :{" "}
+  <span className="text-green-500 font-medium">
+    ${costUsd.toFixed(4)}
+  </span>{" "}
+
+</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -79,11 +132,14 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
 
       {/* Liste des cartes */}
       <div className="space-y-2">
-        {cards.map((card) => (
+        {cards.map((card, index) => (
           <CardItem
             key={card.id}
             card={card}
+            index={index}
             isEditing={editingId === card.id}
+            isDragging={dragIndex === index}
+            isDragOver={dragOverIndex === index}
             onToggle={() => toggleCard(card.id)}
             onToggleMode={() => toggleMode(card.id)}
             onEdit={() => setEditingId(card.id)}
@@ -91,9 +147,21 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
             onUpdateField={(field, val) => updateCard(card.id, field, val)}
             onAddImage={(side, b64) => addImage(card.id, side, b64)}
             onRemoveImage={(side, idx) => removeImage(card.id, side, idx)}
+            onDragStart={() => handleDragStart(index)}
+            onDragOver={() => handleDragOver(index)}
+            onDrop={() => handleDrop(index)}
+            onDragEnd={handleDragEnd}
           />
         ))}
       </div>
+
+      {/* Ajouter une carte manuellement */}
+      <button
+        onClick={addManualCard}
+        className="w-full py-2.5 rounded-xl border border-dashed border-[var(--border)] text-sm text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+      >
+        + Ajouter une carte manuellement
+      </button>
 
       {/* Nom du deck */}
       <div className="bg-[var(--bg-card)] rounded-xl p-4 border border-[var(--border)]">
@@ -140,7 +208,10 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
 
 interface CardItemProps {
   card: Card;
+  index: number;
   isEditing: boolean;
+  isDragging: boolean;
+  isDragOver: boolean;
   onToggle: () => void;
   onToggleMode: () => void;
   onEdit: () => void;
@@ -148,31 +219,47 @@ interface CardItemProps {
   onUpdateField: (field: 'question' | 'answer', value: string) => void;
   onAddImage: (side: 'front' | 'back', base64: string) => void;
   onRemoveImage: (side: 'front' | 'back', index: number) => void;
+  onDragStart: () => void;
+  onDragOver: () => void;
+  onDrop: () => void;
+  onDragEnd: () => void;
 }
 
 function CardItem({
-  card, isEditing, onToggle, onToggleMode, onEdit, onDoneEditing,
-  onUpdateField, onAddImage, onRemoveImage,
+  card, isEditing, isDragging, isDragOver, onToggle, onToggleMode, onEdit, onDoneEditing,
+  onUpdateField, onAddImage, onRemoveImage, onDragStart, onDragOver, onDrop, onDragEnd,
 }: CardItemProps) {
   return (
     <div
-      className={`rounded-xl border p-4 ${
-        card.selected
+      draggable
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(); }}
+      onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
+      onDrop={(e) => { e.preventDefault(); onDrop(); }}
+      onDragEnd={onDragEnd}
+      className={`rounded-xl border p-4 transition-all ${
+        isDragging
+          ? 'opacity-40 scale-[0.98]'
+          : isDragOver
+          ? 'border-[var(--accent)] bg-[var(--accent-dim)]'
+          : card.selected
           ? 'border-[var(--border)] bg-[var(--bg-card)]'
           : 'border-transparent bg-[var(--bg-card)] opacity-40'
       }`}
     >
       <div className="flex gap-3">
-        <button
-          onClick={onToggle}
-          className={`mt-0.5 w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center ${
-            card.selected
-              ? 'bg-[var(--accent)] border-[var(--accent)]'
-              : 'border-[var(--border)]'
-          }`}
-        >
-          {card.selected && <span className="text-white text-[10px]">✓</span>}
-        </button>
+        <div className="mt-0.5 flex-shrink-0 flex flex-col items-center gap-1.5">
+          <span className="text-[var(--text-muted)] cursor-grab active:cursor-grabbing select-none text-xs leading-none">⠿</span>
+          <button
+            onClick={onToggle}
+            className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+              card.selected
+                ? 'bg-[var(--accent)] border-[var(--accent)]'
+                : 'border-[var(--border)]'
+            }`}
+          >
+            {card.selected && <span className="text-white text-[10px]">✓</span>}
+          </button>
+        </div>
 
         <div className="flex-1 min-w-0">
           {isEditing ? (
@@ -216,6 +303,9 @@ function ReadMode({ card, onEdit, onToggleMode }: { card: Card; onEdit: () => vo
       )}
 
       <div className="flex items-center gap-2 mt-2">
+        {card.id.startsWith('manual-') && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg)] text-[var(--text-muted)] border border-[var(--border)]">Manuel</span>
+        )}
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent-dim)] text-[var(--accent)]">{card.type}</span>
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg)] text-[var(--text-muted)]">{card.difficulty}</span>
         {card.sourceSection && (
