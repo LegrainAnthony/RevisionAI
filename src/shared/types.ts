@@ -1,3 +1,21 @@
+// ─── Paramètres utilisateur ──────────────────────────────────
+
+export interface AppSettings {
+  provider: 'gemini' | 'openai';
+  apiKey: string;
+  model: string;
+  pagesPerBatch: number;
+  cardsPerChunk: number;
+}
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  provider: 'gemini',
+  apiKey: '',
+  model: 'gemini-2.5-flash',
+  pagesPerBatch: 1,
+  cardsPerChunk: 5,
+};
+
 // ─── Cartes Anki (éphémères — pas stockées) ─────────────────
 
 export type CardType = 'definition' | 'process' | 'comparison' | 'application' | 'cause_effect' | 'cloze';
@@ -10,10 +28,11 @@ export interface Card {
   type: CardType;
   difficulty: Difficulty;
   sourceSection: string;
+  sourcePages: number[];  // pages du PDF dont la carte est issue
   selected: boolean;
   frontImages: string[];  // base64 PNG ajoutées par l'utilisateur (côté question)
   backImages: string[];   // base64 PNG ajoutées par l'utilisateur (côté réponse)
-  cardMode: 'basic' | 'reverse'; 
+  cardMode: 'basic' | 'reverse';
 }
 
 // ─── QCM ─────────────────────────────────────────────────────

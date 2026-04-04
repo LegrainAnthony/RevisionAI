@@ -16,10 +16,14 @@ export interface AiVisionResponse {
 export async function callOpenAiVision(
   systemPrompt: string,
   imagesBase64: string[],
-  userText: string
+  userText: string,
+  overrides?: { model?: string; apiKey?: string }
 ): Promise<AiVisionResponse> {
-  if (!CONFIG.openaiApiKey) {
-    throw new Error('Clé API OpenAI manquante. Ajoutez OPENAI_API_KEY dans .env.local');
+  const apiKey = overrides?.apiKey || CONFIG.openaiApiKey;
+  const model = overrides?.model || CONFIG.aiModel;
+
+  if (!apiKey) {
+    throw new Error('Clé API OpenAI manquante. Configurez-la dans les paramètres ou dans .env.local');
   }
 
   // Construire le contenu multimodal : texte + images
@@ -41,10 +45,10 @@ export async function callOpenAiVision(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${CONFIG.openaiApiKey}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: CONFIG.aiModel,
+      model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content },

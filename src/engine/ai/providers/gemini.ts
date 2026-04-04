@@ -15,10 +15,14 @@ export interface AiVisionResponse {
 export async function callGeminiVision(
   systemPrompt: string,
   imagesBase64: string[],
-  userText: string
+  userText: string,
+  overrides?: { model?: string; apiKey?: string }
 ): Promise<AiVisionResponse> {
-  if (!CONFIG.geminiApiKey) {
-    throw new Error('Clé API Gemini manquante. Ajoutez GEMINI_API_KEY dans .env.local');
+  const apiKey = overrides?.apiKey || CONFIG.geminiApiKey;
+  const model = overrides?.model || CONFIG.aiModel;
+
+  if (!apiKey) {
+    throw new Error('Clé API Gemini manquante. Configurez-la dans les paramètres ou dans .env.local');
   }
 
   // Construire les parts : texte + images
@@ -37,7 +41,7 @@ export async function callGeminiVision(
 
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/` +
-    `${CONFIG.aiModel}:generateContent?key=${CONFIG.geminiApiKey}`;
+    `${model}:generateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
     method: 'POST',

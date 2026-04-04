@@ -73,6 +73,7 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
       type: 'definition',
       difficulty: 'medium',
       sourceSection: '',
+      sourcePages: [],
       selected: true,
       frontImages: [],
       backImages: [],
@@ -103,9 +104,9 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
         <div>
           <p className="text-sm font-medium">{selectedCount} / {cards.length} cartes sélectionnées</p>
 <p className="text-xs text-[var(--text-muted)]">
-  Coût
+  Coût 
     <span className="text-red-500 font-semibold">
-    réel
+    réel 
   </span>
    de cette génération :{" "}
   <span className="text-green-500 font-medium">
@@ -310,6 +311,11 @@ function ReadMode({ card, onEdit, onToggleMode }: { card: Card; onEdit: () => vo
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg)] text-[var(--text-muted)]">{card.difficulty}</span>
         {card.sourceSection && (
           <span className="text-[10px] text-[var(--text-muted)]">📖 {card.sourceSection}</span>
+        )}
+        {card.sourcePages?.length > 0 && (
+          <span className="text-[10px] text-[var(--text-muted)]">
+            p.{card.sourcePages.length === 1 ? card.sourcePages[0] : `${card.sourcePages[0]}–${card.sourcePages[card.sourcePages.length - 1]}`}
+          </span>
         )}
         <button
           onClick={onToggleMode}
