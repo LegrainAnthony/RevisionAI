@@ -89,9 +89,6 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          hash: pdfHash,
-          fileName,
-          pageCount: pages.length,
           images: selectedImages,
           config: {
             mode: 'cards' as GenerationMode,

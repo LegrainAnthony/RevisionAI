@@ -1,4 +1,4 @@
-import { Card, PromptProfile } from '@/shared/types';
+import { PromptProfile } from '@/shared/types';
 
 // ─── Utilitaire commun ───────────────────────────────────────
 
@@ -33,7 +33,7 @@ function jsonFooter(): string {
 export function buildCardPrompt(
   count: number,
   difficulty: string,
-  previousCards: Card[],
+  _previousCards: unknown[],
   profileId: string = 'general',
   customProfiles: PromptProfile[] = []
 ): string {

@@ -87,31 +87,6 @@ export interface GenerationConfig {
   selectedPages: number[];
 }
 
-// ─── Cache ───────────────────────────────────────────────────
-
-export interface DocumentMeta {
-  hash: string;
-  fileName: string;
-  pageCount: number;
-  createdAt: string;
-  costs: {
-    total: number;
-    history: { id: string; cost: number; date: string }[];
-  };
-}
-
-export interface GenerationRecord {
-  id: string;
-  mode: GenerationMode;
-  cards: Card[];
-  quizzes: Quiz[];
-  selectedPages: number[];
-  costUsd: number;
-  provider: string;
-  model: string;
-  createdAt: string;
-}
-
 // ─── API ─────────────────────────────────────────────────────
 
 export interface GenerateResponse {

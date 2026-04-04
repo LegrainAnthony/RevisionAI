@@ -21,7 +21,6 @@ AI_PROVIDER=gemini        # or "openai"
 AI_MODEL=gemini-2.5-flash # or "gpt-4o-mini"
 GEMINI_API_KEY=...
 OPENAI_API_KEY=...
-CACHE_DIR=./data/cache    # optional, this is the default
 ```
 
 These are **server-side fallbacks**. Users can override provider, model, and API key directly from the settings panel in the UI — those values are stored in `localStorage` and sent with each request.
@@ -31,14 +30,14 @@ These are **server-side fallbacks**. Users can override provider, model, and API
 AnkiDocs transforms a PDF into Anki flashcards using AI vision. The key design decisions:
 
 - **PDF rendering is client-side**: `pdfjs-dist` runs in the browser and converts PDF pages to base64 PNG images. The server never receives the PDF file — only the already-rendered images.
-- **No database**: Generations are stored as JSON files in `data/cache/{hash}/` (one subfolder per document, identified by hash). `meta.json` holds document metadata and cumulative costs; `generations/*.json` holds card records used for deduplication.
+- **Stateless**: No database, no cache. Each generation is independent — cards are returned directly in the API response and live in the browser's React state only.
 - **Synchronous processing**: No job queue. The API route processes all image batches in a single request. For very long PDFs (200+ pages), the Next.js default timeout (~60s in dev) may cut the response short.
 - **User settings in localStorage**: Provider, API key, model, pagesPerBatch, cardsPerChunk, and active prompt profile are stored client-side and sent with every `/api/generate` request. Server env vars are used as fallback only.
 
 ### Data flow
 
 1. User uploads PDF → browser renders pages to PNG via `pdfjs-dist`
-2. User selects pages + config → client POSTs `{ hash, images[], config, settings }` to `/api/generate`
+2. User selects pages + config → client POSTs `{ images[], config, settings, chunkCardOverrides }` to `/api/generate`
 3. Server resolves AI provider/model/key from `settings` (falls back to env vars)
 4. Server splits images into batches of `settings.pagesPerBatch`, calls AI vision per batch using the active prompt profile. Each batch uses `chunkCardOverrides[i]` if set, otherwise `settings.cardsPerChunk`.
 5. Each card is tagged with `sourcePages` (the page numbers of the batch it was generated from)
@@ -56,8 +55,7 @@ AnkiDocs transforms a PDF into Anki flashcards using AI vision. The key design d
 | `src/engine/ai/prompts.ts` | All prompt profiles. `buildCardPrompt()` dispatches to the right prompt based on `profileId`. |
 | `src/engine/generation/cardGenerator.ts` | Batching logic, AI call loop, JSON parsing. Tags each card with `sourcePages`. |
 | `src/engine/export/ankiExporter.ts` | Generates tab-separated `.txt` importable by Anki (supports images via base64 HTML) |
-| `src/cache/cacheManager.ts` | File-based cache CRUD (`ensureDocument`, `saveGeneration`, `getPreviousCards`) |
-| `src/app/api/generate/route.ts` | POST `/api/generate` — resolves settings overrides, orchestrates generation + cache |
+| `src/app/api/generate/route.ts` | POST `/api/generate` — resolves settings overrides, orchestrates generation |
 | `src/app/api/export/route.ts` | POST `/api/export` — returns `.txt` file |
 | `src/app/page.tsx` | Main page, state orchestration, passes `settings` to all API calls |
 | `src/components/PdfUploader.tsx` | PDF upload + client-side rendering to base64 PNG |

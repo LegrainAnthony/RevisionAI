@@ -22,7 +22,6 @@ interface CardResult {
 export async function generateCards(
   pagesBase64: string[],
   config: GenerationConfig,
-  previousCards: Card[],
   aiOverrides?: AiOverrides & { pagesPerBatch?: number; cardsPerChunk?: number },
   promptProfileId?: string,
   customProfiles?: PromptProfile[],
@@ -45,7 +44,7 @@ export async function generateCards(
 
   for (let i = 0; i < batches.length; i++) {
     const batchCardCount = chunkCardOverrides?.[i] ?? perBatch;
-    const prompt = buildCardPrompt(batchCardCount, config.difficulty, [...previousCards, ...allCards], promptProfileId, customProfiles);
+    const prompt = buildCardPrompt(batchCardCount, config.difficulty, [], promptProfileId, customProfiles);
 
     try {
       const res = await callVision(prompt, batches[i], undefined, aiOverrides);

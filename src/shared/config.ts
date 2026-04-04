@@ -14,9 +14,6 @@ export const CONFIG = {
   /** Nombre de cartes à générer par chunk */
   cardsPerChunk: 5,
 
-  /** Dossier de cache */
-  cacheDir: env('CACHE_DIR', './data/cache'),
-
   /** Taille max de fichier (MB) */
   maxFileSizeMb: 50,
 } as const;
