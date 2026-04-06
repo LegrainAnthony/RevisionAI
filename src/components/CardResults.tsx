@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Card } from '@/shared/types';
 
 interface Props {
@@ -280,12 +280,62 @@ function CardItem({
   );
 }
 
+// ─── Rendu texte formaté (listes + sauts de ligne) ──────────
+
+function renderCardText(text: string, className?: string) {
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let listItems: string[] = [];
+  let listType: 'ul' | 'ol' | null = null;
+
+  function flushList() {
+    if (!listItems.length) return;
+    const Tag = listType === 'ol' ? 'ol' : 'ul';
+    const listClass = listType === 'ol'
+      ? 'list-decimal list-inside space-y-0.5 my-1'
+      : 'list-disc list-inside space-y-0.5 my-1';
+    elements.push(
+      <Tag key={elements.length} className={listClass}>
+        {listItems.map((item, i) => <li key={i}>{item}</li>)}
+      </Tag>
+    );
+    listItems = [];
+    listType = null;
+  }
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const bulletMatch = line.match(/^[-*•]\s+(.+)/);
+    const numberedMatch = line.match(/^\d+[.)]\s+(.+)/);
+
+    if (bulletMatch) {
+      if (listType === 'ol') flushList();
+      listType = 'ul';
+      listItems.push(bulletMatch[1]);
+    } else if (numberedMatch) {
+      if (listType === 'ul') flushList();
+      listType = 'ol';
+      listItems.push(numberedMatch[1]);
+    } else {
+      flushList();
+      if (line.trim() === '') {
+        elements.push(<div key={elements.length} className="h-1" />);
+      } else {
+        elements.push(<span key={elements.length} className="block">{line}</span>);
+      }
+    }
+  }
+
+  flushList();
+  return <div className={className}>{elements}</div>;
+}
+
 // ─── Mode lecture ────────────────────────────────────────────
 
 function ReadMode({ card, onEdit, onToggleMode }: { card: Card; onEdit: () => void; onToggleMode: () => void }) {
   return (
     <div>
-      <p className="text-sm font-medium leading-snug">{card.question}</p>
+      {renderCardText(card.question, 'text-sm font-medium leading-snug')}
       {card.frontImages.length > 0 && (
         <div className="flex gap-1.5 mt-1.5 flex-wrap">
           {card.frontImages.map((img, i) => (
@@ -294,7 +344,7 @@ function ReadMode({ card, onEdit, onToggleMode }: { card: Card; onEdit: () => vo
         </div>
       )}
 
-      <p className="text-sm text-[var(--text-muted)] mt-1.5 leading-snug">{card.answer}</p>
+      {renderCardText(card.answer, 'text-sm text-[var(--text-muted)] mt-1.5 leading-snug')}
       {card.backImages.length > 0 && (
         <div className="flex gap-1.5 mt-1.5 flex-wrap">
           {card.backImages.map((img, i) => (
