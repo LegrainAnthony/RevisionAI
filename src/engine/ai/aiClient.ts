@@ -36,15 +36,29 @@ export async function callVision(
 /**
  * Estime le coût d'un appel en dollars.
  *
- * Les prix sont approximatifs — ils varient selon le provider
+ * Les prix sont approximatifs — ils varient selon le provider/modèle
  * et sont susceptibles de changer.
  */
-export function estimateCost(inputTokens: number, outputTokens: number, provider?: string): number {
-  const prices: Record<string, { input: number; output: number }> = {
-    openai: { input: 0.15, output: 0.60 },   // GPT-4o-mini ($/M tokens)
-    gemini: { input: 0.30, output: 2.50 },    // Gemini 2.5 Flash ($/M tokens)
+export function estimateCost(inputTokens: number, outputTokens: number, provider?: string, model?: string): number {
+  // Prix par modèle ($/M tokens)
+  const modelPrices: Record<string, { input: number; output: number }> = {
+    // OpenAI
+    'gpt-4o-mini':             { input: 0.15,  output: 0.60  },
+    'gpt-4o':                  { input: 2.50,  output: 10.00 },
+    // Gemini
+    'gemini-2.5-flash':        { input: 0.30,  output: 2.50  },
+    'gemini-2.0-flash':        { input: 0.10,  output: 0.40  },
+    'gemini-1.5-flash':        { input: 0.075, output: 0.30  },
+    'gemini-1.5-pro':          { input: 1.25,  output: 5.00  },
   };
 
-  const p = prices[provider || CONFIG.aiProvider] || prices.gemini;
+  // Fallback par provider si le modèle n'est pas dans la table
+  const providerFallback: Record<string, { input: number; output: number }> = {
+    openai: { input: 0.15,  output: 0.60  }, // gpt-4o-mini par défaut
+    gemini: { input: 0.30,  output: 2.50  }, // gemini-2.5-flash par défaut
+  };
+
+  const resolvedProvider = provider || CONFIG.aiProvider;
+  const p = (model && modelPrices[model]) || providerFallback[resolvedProvider] || providerFallback.gemini;
   return (inputTokens / 1_000_000) * p.input + (outputTokens / 1_000_000) * p.output;
 }

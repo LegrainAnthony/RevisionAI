@@ -305,6 +305,7 @@ export default function Home() {
               totalCards={totalCards}
               difficulty={difficulty}
               provider={settings.provider}
+              model={settings.model}
               onCardsPerChunkChange={(val) => updateSettings({ cardsPerChunk: val })}
               onDifficultyChange={setDifficulty}
               onGenerate={handleGenerate}

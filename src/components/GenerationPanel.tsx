@@ -9,6 +9,7 @@ interface Props {
   totalCards: number;
   difficulty: Difficulty | 'mixed';
   provider: 'openai' | 'gemini';
+  model: string;
   onCardsPerChunkChange: (n: number) => void;
   onDifficultyChange: (d: Difficulty | 'mixed') => void;
   onGenerate: () => void;
@@ -33,13 +34,14 @@ export function GenerationPanel({
   totalCards,
   difficulty,
   provider,
+  model,
   onCardsPerChunkChange,
   onDifficultyChange,
   onGenerate,
   loading,
 }: Props) {
   const chunkCount = Math.ceil(selectedPageCount / pagesPerChunk);
-  const cost = estimateCostClient(selectedPageCount, totalCards, provider);
+  const cost = estimateCostClient(selectedPageCount, totalCards, provider, model);
 
   return (
     <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border)] p-6 space-y-6">
@@ -134,11 +136,25 @@ function StatBox({ label, value, accent }: { label: string; value: string; accen
  * Estimation de coût côté client (pas d'appel serveur).
  * Basée sur les prix publics approximatifs.
  */
-function estimateCostClient(pageCount: number, cardCount: number, provider: string): number {
-  const prices = {
-    openai: { perImage: 0.0002, perCard: 0.00006 },
-    gemini: { perImage: 0.00008, perCard: 0.00025 },
+function estimateCostClient(pageCount: number, cardCount: number, provider: string, model?: string): number {
+  // Prix par modèle (estimations : ~500 tokens/image input, ~150 tokens/carte output)
+  const modelPrices: Record<string, { perImage: number; perCard: number }> = {
+    // OpenAI
+    'gpt-4o-mini': { perImage: 0.000075, perCard: 0.000090 },
+    'gpt-4o':      { perImage: 0.001250, perCard: 0.001500 },
+    // Gemini
+    'gemini-2.5-flash': { perImage: 0.000150, perCard: 0.000375 },
+    'gemini-2.0-flash': { perImage: 0.000050, perCard: 0.000060 },
+    'gemini-1.5-flash': { perImage: 0.0000375, perCard: 0.000045 },
+    'gemini-1.5-pro':   { perImage: 0.000625, perCard: 0.000750 },
   };
-  const p = prices[provider as keyof typeof prices] || prices.gemini;
+
+  // Fallback par provider
+  const providerFallback = {
+    openai: { perImage: 0.000075, perCard: 0.000090 }, // gpt-4o-mini
+    gemini: { perImage: 0.000150, perCard: 0.000375 }, // gemini-2.5-flash
+  };
+
+  const p = (model && modelPrices[model]) || providerFallback[provider as keyof typeof providerFallback] || providerFallback.gemini;
   return pageCount * p.perImage + cardCount * p.perCard;
 }

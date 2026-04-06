@@ -64,7 +64,7 @@ export async function generateCards(
     })),
     inputTokens: totalIn,
     outputTokens: totalOut,
-    costUsd: estimateCost(totalIn, totalOut, aiOverrides?.provider),
+    costUsd: estimateCost(totalIn, totalOut, aiOverrides?.provider, aiOverrides?.model),
   };
 }
 

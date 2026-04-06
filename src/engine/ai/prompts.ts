@@ -87,36 +87,80 @@ function buildKinePrompt(count: number, difficulty: string): string {
 MISSION :
 Analyse les images de cours fournies et génère exactement ${count} cartes de révision.
 
-OBJECTIF PRINCIPAL :
-Produire des cartes extrêmement fidèles au cours, optimisées pour apprendre et réciter le contenu tel qu'il est enseigné.
-Les cartes doivent ressembler au cours, reprendre sa logique, son vocabulaire et ses listes importantes.
+OBJECTIF PRINCIPAL (CRITIQUE) :
+Produire des cartes STRICTEMENT fidèles au cours, en conservant 100% des informations importantes.
+Aucune information pertinente du cours ne doit être perdue.
+
+PRINCIPE FONDAMENTAL :
+Tu es un EXTRACTEUR et COPIEUR du cours, pas un reformulateur.
 
 CONTRAINTE ABSOLUE :
-Tu ne dois utiliser QUE des informations clairement visibles dans le cours.
-Ne rien inventer. Ne pas ajouter de connaissances externes.
+- Tu ne dois utiliser QUE les informations visibles dans le cours
+- Tu ne dois RIEN inventer
+- Tu ne dois PAS reformuler si une formulation est présente dans le cours
+- Tu dois privilégier les formulations EXACTES du cours
 
-RÈGLES :
-1. Une carte = une information claire, utile à mémoriser.
-2. Tu peux faire des cartes sous forme de liste si le cours présente une liste, une classification, des étapes ou une énumération.
-3. Questions simples, directes, orientées révision.
-4. Réponses courtes mais complètes par rapport au cours.
-5. Conserve les mots du cours et le niveau de précision scientifique exact.
-6. Exploite aussi les tableaux, schémas, légendes et annotations visibles.
-7. Pour les schémas anatomiques, fais des cartes sur les structures, repères, rapports, insertions, trajets.
+RÈGLES CRITIQUES :
+
+1. EXHAUSTIVITÉ TOTALE
+- Chaque carte doit contenir TOUTES les informations associées à la question dans le cours
+- Ne jamais omettre un élément d’une liste ou d’une explication
+- Si plusieurs éléments sont liés → les regrouper dans UNE SEULE carte
+
+2. RESPECT STRICT DU TEXTE
+- Reprendre les mots EXACTS du cours autant que possible
+- Interdiction de simplifier ou reformuler si le texte existe déjà
+- Conserver les expressions clés du cours (ex : "sert à stabiliser", "transfert de force")
+
+3. PRIORITÉ AUX ANNOTATIONS
+- Inclure IMPÉRATIVEMENT :
+  - notes manuscrites
+  - ajouts écrits à la main
+  - annotations autour du texte
+- Elles sont considérées comme aussi importantes que le texte principal
+
+4. STRUCTURE DES RÉPONSES
+- Favoriser les listes structurées quand le cours contient :
+  - énumérations
+  - classifications
+  - étapes
+- Chaque élément doit être complet (pas tronqué)
+
+5. CARTES OPTIMISÉES POUR LA RÉCITATION
+- Les cartes doivent permettre de réciter le cours tel quel
+- Pas de résumé → restitution fidèle
+
+6. SCHÉMAS ET IMAGES
+- Exploiter :
+  - légendes
+  - repères anatomiques
+  - relations
+  - insertions
+  - trajets
+- Transformer chaque élément visible en information mémorisable
+
+7. DENSITÉ D’INFORMATION
+- Si une notion contient plusieurs infos → les regrouper dans une seule carte
+- Éviter de fragmenter artificiellement
+
 8. ${difficultyLine(difficulty)}
 
 FORMAT DE CARTES À PRIVILÉGIER :
 - Questions de restitution directe du cours
-- Listes d'éléments anatomiques / physiologiques
-- Classifications et tableaux comparatifs
-- Définitions fidèles
-- Structures visibles dans un schéma
+- Listes complètes (TOUS les éléments)
+- Définitions EXACTES
+- Contenu de schéma + annotations
+- Relations anatomiques complètes
 
-INTERDIT :
-- Inventer une information
-- Reformuler librement en s'éloignant du cours
-- Ajouter des connaissances personnelles
-- Produire des doublons
+INTERDIT (STRICT) :
+- Omettre une information présente dans le cours
+- Reformuler une phrase existante
+- Résumer ou simplifier
+- Ajouter des connaissances externes
+- Produire des cartes incomplètes
+
+OBJECTIF FINAL :
+Si on compare la carte au cours → aucune information ne doit manquer.
 
 ${jsonFooter()}`;
 }
