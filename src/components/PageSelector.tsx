@@ -6,9 +6,11 @@ interface Props {
   pagesPerChunk: number;
   defaultCardsPerChunk: number;
   chunkCardOverrides: Record<number, number>;
+  chunkFocusOverrides: Record<number, string>;
   onToggle: (index: number) => void;
   onChunkSizeChange: (n: number) => void;
   onChunkOverride: (chunkIndex: number, value: number | null) => void;
+  onChunkFocus: (chunkIndex: number, value: string) => void;
 }
 
 /**
@@ -19,7 +21,7 @@ interface Props {
  */
 export function PageSelector({
   pages, selected, pagesPerChunk, defaultCardsPerChunk,
-  chunkCardOverrides, onToggle, onChunkSizeChange, onChunkOverride,
+  chunkCardOverrides, chunkFocusOverrides, onToggle, onChunkSizeChange, onChunkOverride, onChunkFocus,
 }: Props) {
   const selectedCount = selected.filter(Boolean).length;
   const chunkCount = Math.ceil(selectedCount / pagesPerChunk);
@@ -64,12 +66,14 @@ export function PageSelector({
         const override = chunkCardOverrides[ci];
         const cardCount = override ?? defaultCardsPerChunk;
         const hasOverride = override !== undefined;
+        const focus = chunkFocusOverrides[ci] ?? '';
+        const hasFocus = focus.trim().length > 0;
 
         return (
           <div
             key={ci}
             className={`rounded-xl border bg-[var(--bg-card)] p-3 ${
-              hasOverride ? 'border-[var(--accent)]/50' : 'border-[var(--border)]'
+              hasOverride || hasFocus ? 'border-[var(--accent)]/50' : 'border-[var(--border)]'
             }`}
           >
             <div className="flex items-center justify-between mb-2 px-1">
@@ -135,6 +139,17 @@ export function PageSelector({
                 </button>
               ))}
             </div>
+
+            {/* Consigne libre appliquée UNIQUEMENT à ce chunk */}
+            {chunkSelected > 0 && (
+              <textarea
+                value={focus}
+                onChange={(e) => onChunkFocus(ci, e.target.value)}
+                rows={2}
+                placeholder="Consigne pour CE chunk (optionnel) — ex : insiste sur le schéma, réponses en 1 mot…"
+                className="mt-2 w-full bg-[var(--bg)] border border-[var(--border)] rounded-lg p-2 text-xs resize-none focus:outline-none focus:border-[var(--accent)]"
+              />
+            )}
           </div>
         );
       })}

@@ -25,7 +25,8 @@ export async function generateCards(
   aiOverrides?: AiOverrides & { pagesPerBatch?: number; cardsPerChunk?: number },
   promptProfileId?: string,
   customProfiles?: PromptProfile[],
-  chunkCardOverrides?: Record<number, number>
+  chunkCardOverrides?: Record<number, number>,
+  chunkFocusOverrides?: Record<number, string>
 ): Promise<CardResult> {
   const pagesPerBatch = aiOverrides?.pagesPerBatch ?? CONFIG.pagesPerBatch;
   const batches = splitBatches(pagesBase64, pagesPerBatch);
@@ -44,7 +45,8 @@ export async function generateCards(
 
   for (let i = 0; i < batches.length; i++) {
     const batchCardCount = chunkCardOverrides?.[i] ?? perBatch;
-    const prompt = buildCardPrompt(batchCardCount, config.difficulty, [], promptProfileId, customProfiles);
+    const batchFocus = chunkFocusOverrides?.[i] ?? '';
+    const prompt = buildCardPrompt(batchCardCount, config.difficulty, [], promptProfileId, customProfiles, batchFocus);
 
     try {
       const res = await callVision(prompt, batches[i], undefined, aiOverrides);

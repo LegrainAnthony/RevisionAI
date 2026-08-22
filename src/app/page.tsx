@@ -32,6 +32,7 @@ export default function Home() {
   // ── Configuration ──
   const [difficulty, setDifficulty] = useState<Difficulty | 'mixed'>('mixed');
   const [chunkCardOverrides, setChunkCardOverrides] = useState<Record<number, number>>({});
+  const [chunkFocusOverrides, setChunkFocusOverrides] = useState<Record<number, string>>({});
 
   // ── Résultats ──
   const [cards, setCards] = useState<Card[]>([]);
@@ -84,6 +85,7 @@ export default function Home() {
 
       const total = computeTotalCards();
       const batchOverrides = resolveBatchOverrides(selectedIndices);
+      const batchFocus = resolveBatchFocus(selectedIndices);
 
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -99,6 +101,7 @@ export default function Home() {
           },
           settings,
           chunkCardOverrides: batchOverrides,
+          chunkFocusOverrides: batchFocus,
         }),
       });
 
@@ -152,6 +155,15 @@ export default function Home() {
     });
   }
 
+  function handleChunkFocus(chunkIndex: number, value: string) {
+    setChunkFocusOverrides((prev) => {
+      const next = { ...prev };
+      if (!value.trim()) delete next[chunkIndex];
+      else next[chunkIndex] = value;
+      return next;
+    });
+  }
+
   /** Retour au début */
   function handleReset() {
     setStep('upload');
@@ -161,6 +173,7 @@ export default function Home() {
     setCostUsd(0);
     setError(null);
     setChunkCardOverrides({});
+    setChunkFocusOverrides({});
   }
 
   // ── Rendu ──────────────────────────────────────────────────
@@ -198,6 +211,23 @@ export default function Home() {
       const uiChunkIdx = Math.floor(firstPage / pagesPerBatch);
       if (chunkCardOverrides[uiChunkIdx] !== undefined) {
         result[batchIdx] = chunkCardOverrides[uiChunkIdx];
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Idem que resolveBatchOverrides, mais pour les consignes libres par chunk :
+   * mappe les consignes indexées par chunk visuel vers l'index de batch serveur.
+   */
+  function resolveBatchFocus(selectedIndices: number[]): Record<number, string> {
+    const pagesPerBatch = settings.pagesPerBatch;
+    const result: Record<number, string> = {};
+    for (let batchIdx = 0; batchIdx * pagesPerBatch < selectedIndices.length; batchIdx++) {
+      const firstPage = selectedIndices[batchIdx * pagesPerBatch];
+      const uiChunkIdx = Math.floor(firstPage / pagesPerBatch);
+      if (chunkFocusOverrides[uiChunkIdx] !== undefined) {
+        result[batchIdx] = chunkFocusOverrides[uiChunkIdx];
       }
     }
     return result;
@@ -290,9 +320,11 @@ export default function Home() {
               pagesPerChunk={settings.pagesPerBatch}
               defaultCardsPerChunk={settings.cardsPerChunk}
               chunkCardOverrides={chunkCardOverrides}
+              chunkFocusOverrides={chunkFocusOverrides}
               onToggle={togglePage}
               onChunkSizeChange={(val) => updateSettings({ pagesPerBatch: val })}
               onChunkOverride={handleChunkOverride}
+              onChunkFocus={handleChunkFocus}
             />
           </div>
 

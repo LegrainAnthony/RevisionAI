@@ -35,7 +35,18 @@ export function buildCardPrompt(
   difficulty: string,
   _previousCards: unknown[],
   profileId: string = 'general',
-  customProfiles: PromptProfile[] = []
+  customProfiles: PromptProfile[] = [],
+  focus: string = ''
+): string {
+  const base = selectProfilePrompt(count, difficulty, profileId, customProfiles);
+  return withFocus(base, focus);
+}
+
+function selectProfilePrompt(
+  count: number,
+  difficulty: string,
+  profileId: string,
+  customProfiles: PromptProfile[]
 ): string {
   switch (profileId) {
     case 'kine':    return buildKinePrompt(count, difficulty);
@@ -50,6 +61,20 @@ export function buildCardPrompt(
         : buildGeneralPrompt(count, difficulty);
     }
   }
+}
+
+/**
+ * Injecte la consigne libre d'un chunk (si présente) juste AVANT le bloc format JSON,
+ * en la marquant comme prioritaire. Orthogonal au profil actif : marche avec tous.
+ */
+function withFocus(prompt: string, focus: string): string {
+  const f = (focus || '').trim();
+  if (!f) return prompt;
+  const block = `CONSIGNE SPÉCIFIQUE POUR CES PAGES (PRIORITAIRE sur les règles générales) :\n${f}`;
+  const marker = 'FORMAT JSON strict';
+  const idx = prompt.indexOf(marker);
+  if (idx === -1) return `${prompt}\n\n${block}`;
+  return `${prompt.slice(0, idx)}${block}\n\n${prompt.slice(idx)}`;
 }
 
 // ─── Profil : Général ────────────────────────────────────────

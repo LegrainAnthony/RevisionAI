@@ -12,16 +12,18 @@ import { AppSettings, GenerationConfig } from '@/shared/types';
  *   images: string[],        ← base64 des pages SÉLECTIONNÉES
  *   config: GenerationConfig,
  *   settings?: AppSettings,
- *   chunkCardOverrides?: Record<number, number>
+ *   chunkCardOverrides?: Record<number, number>,
+ *   chunkFocusOverrides?: Record<number, string>
  * }
  */
 export async function POST(request: NextRequest) {
   try {
-    const { images, config, settings, chunkCardOverrides } = await request.json() as {
+    const { images, config, settings, chunkCardOverrides, chunkFocusOverrides } = await request.json() as {
       images: string[];
       config: GenerationConfig;
       settings?: AppSettings;
       chunkCardOverrides?: Record<number, number>;
+      chunkFocusOverrides?: Record<number, string>;
     };
 
     if (!images?.length || !config) {
@@ -42,7 +44,8 @@ export async function POST(request: NextRequest) {
       aiOverrides,
       settings?.activeProfileId,
       settings?.customProfiles,
-      chunkCardOverrides
+      chunkCardOverrides,
+      chunkFocusOverrides
     );
 
     return NextResponse.json({
