@@ -1,7 +1,7 @@
 # AnkiDocs v2
 
 Génère des cartes Anki à partir de PDF de cours via l'IA vision.
-Upload ton PDF → sélectionne les pages → l'IA les lit et crée des flashcards → exporte en .apkg.
+Upload ton PDF → sélectionne les pages → l'IA les lit et crée des flashcards → exporte en .txt importable dans Anki.
 
 ---
 
@@ -20,7 +20,7 @@ Rien d'autre. Pas de Docker, pas de base de données.
 cd ankidocs-v2
 npm install
 cp .env.example .env.local
-# → Éditer .env.local avec ta clé API
+# → Optionnel : la clé peut aussi être saisie dans les paramètres de l'app
 npm run dev
 ```
 
@@ -50,11 +50,15 @@ Pour arrêter : fermer la fenêtre du terminal.
 
 1. **Glisse ton PDF** sur la zone de drop
 2. **Vérifie les pages** — clique sur une page pour la retirer du traitement
-3. **Ajuste les chunks** — choisis combien de pages par groupe (2 à 6)
-4. **Configure** — cartes par chunk (2 à 10), difficulté, et vérifie le coût estimé
-5. **Génère** — l'IA lit les images de tes pages et crée des flashcards
-6. **Vérifie** — lis chaque carte, modifie si nécessaire, décoche les mauvaises
-7. **Exporte** — télécharge le .apkg et importe-le dans Anki
+3. **Ajuste les chunks** — choisis combien de pages par groupe (1 à 8)
+4. **Donne une consigne à un chunk** (optionnel) — « uniquement les définitions »,
+   « concentre-toi sur les dates »… Elle n'est transmise que pour ce chunk. Le lien
+   « Voir le prompt envoyé pour ce chunk » montre exactement ce que le modèle recevra.
+5. **Configure** — modèle, cartes par chunk, difficulté, consigne globale, coût estimé
+6. **Génère** — la progression s'affiche chunk par chunk, avec le nombre de cartes
+   obtenues face au nombre demandé. Un chunk en échec peut être relancé seul.
+7. **Vérifie** — lis chaque carte, modifie si nécessaire, décoche les mauvaises
+8. **Exporte** — télécharge le .txt et importe-le dans Anki
 
 ### Déduplication
 

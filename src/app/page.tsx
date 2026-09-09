@@ -1,252 +1,302 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Card, Difficulty, GenerationMode } from '@/shared/types';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import type { Card, ChunkStatus, UsageStats } from '@/shared/types';
+import { resolveProfile, toSpec } from '@/shared/profiles';
+import {
+  chunksFromWindows,
+  planWindows,
+  totalCards as sumCards,
+  totalPages as sumPages,
+} from '@/engine/generation/chunkPlanner';
+import {
+  flattenCards,
+  retryChunk,
+  runGeneration,
+  type RunContext,
+} from '@/engine/generation/generationRunner';
+import { buildChunkPrompt } from '@/engine/ai/promptBuilder';
+import { useSettings } from '@/hooks/useSettings';
+import { useApiKeys } from '@/hooks/useApiKeys';
 import { PdfUploader } from '@/components/PdfUploader';
 import { PageSelector } from '@/components/PageSelector';
 import { GenerationPanel } from '@/components/GenerationPanel';
+import { GenerationProgress } from '@/components/GenerationProgress';
 import { CardResults } from '@/components/CardResults';
 import { SettingsPanel } from '@/components/SettingsPanel';
-import { useSettings } from '@/hooks/useSettings';
+import { PromptPreview } from '@/components/PromptPreview';
 
-// ─── Types locaux ────────────────────────────────────────────
+type Step = 'upload' | 'configure' | 'generating' | 'results';
 
-type Step = 'upload' | 'configure' | 'results';
+const STEPS: { id: Step; label: string }[] = [
+  { id: 'upload', label: 'Import' },
+  { id: 'configure', label: 'Configurer' },
+  { id: 'generating', label: 'Génération' },
+  { id: 'results', label: 'Résultats' },
+];
 
-// ─── Page principale ─────────────────────────────────────────
+const EMPTY_USAGE: UsageStats = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
 export default function Home() {
-  // ── Paramètres utilisateur ──
-  const { settings, updateSettings } = useSettings();
-  const [showSettings, setShowSettings] = useState(false);
+  const { settings, updateSettings, hydrated: settingsReady } = useSettings();
+  const keys = useApiKeys();
 
-  // ── Étape courante ──
   const [step, setStep] = useState<Step>('upload');
-
-  // ── Données du PDF ──
-  const [fileName, setFileName] = useState('');
-  const [pdfHash, setPdfHash] = useState('');
-  const [pages, setPages] = useState<string[]>([]);         // base64 images
-  const [selected, setSelected] = useState<boolean[]>([]);   // sélection par page
-
-  // ── Configuration ──
-  const [difficulty, setDifficulty] = useState<Difficulty | 'mixed'>('mixed');
-  const [chunkCardOverrides, setChunkCardOverrides] = useState<Record<number, number>>({});
-  const [chunkFocusOverrides, setChunkFocusOverrides] = useState<Record<number, string>>({});
-
-  // ── Résultats ──
-  const [cards, setCards] = useState<Card[]>([]);
-  const [deckName, setDeckName] = useState('Default');
-  const [costUsd, setCostUsd] = useState(0);
-
-  // ── État UI ──
-  const [generating, setGenerating] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Handlers ───────────────────────────────────────────────
+  // ── Document ──
+  const [fileName, setFileName] = useState('');
+  const [deckName, setDeckName] = useState('Default');
+  const [pages, setPages] = useState<string[]>([]);
+  const [selected, setSelected] = useState<boolean[]>([]);
 
-  /** Appelé quand le PDF est rendu en images par PdfUploader */
-  const handlePdfRendered = useCallback(async (name: string, pagesBase64: string[]) => {
-    setDeckName(name.replace(/\.[^.]+$/, ''));
-    setFileName(name.replace(/\.[^.]+$/, ''));
-    setPages(pagesBase64);
-    setSelected(new Array(pagesBase64.length).fill(true));
+  // ── Réglages par chunk, indexés par index de fenêtre (identité stable) ──
+  const [cardOverrides, setCardOverrides] = useState<Record<number, number>>({});
+  const [instructions, setInstructions] = useState<Record<number, string>>({});
 
-    // Hash simple pour identifier le PDF (nom + taille approximative)
-    const hash = await computeHash(name + pagesBase64.length);
-    setPdfHash(hash);
+  // ── Génération ──
+  const [statuses, setStatuses] = useState<ChunkStatus[]>([]);
+  const [cardsByChunk, setCardsByChunk] = useState<Record<number, Card[]>>({});
+  const [usage, setUsage] = useState<UsageStats>(EMPTY_USAGE);
+  const [generating, setGenerating] = useState(false);
+  const [retrying, setRetrying] = useState<number | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
+  // ── Résultats éditables ──
+  const [cards, setCards] = useState<Card[]>([]);
+  const [exporting, setExporting] = useState(false);
+
+  // ── Découpage : une seule source, partagée par l'affichage et l'envoi ──
+  const windows = useMemo(
+    () =>
+      planWindows({
+        pageCount: pages.length,
+        selected,
+        pagesPerChunk: settings.pagesPerChunk,
+        defaultCardCount: settings.cardsPerChunk,
+        cardOverrides,
+        instructions,
+      }),
+    [pages.length, selected, settings.pagesPerChunk, settings.cardsPerChunk, cardOverrides, instructions]
+  );
+
+  const chunks = useMemo(() => chunksFromWindows(windows), [windows]);
+  const activeProfile = useMemo(
+    () => resolveProfile(settings.activeProfileId, settings.customProfiles),
+    [settings.activeProfileId, settings.customProfiles]
+  );
+
+  const runContext = useCallback(
+    (): RunContext => ({
+      params: {
+        difficulty: settings.difficulty,
+        language: settings.language,
+        globalInstructions: settings.globalInstructions,
+      },
+      profile: toSpec(activeProfile),
+      selection: { provider: settings.provider, model: settings.models[settings.provider] },
+      apiKey: keys.getKey(settings.provider),
+      autoComplete: settings.autoCompleteCount,
+      imageDetail: settings.imageDetail,
+      getImage: (pageNumber: number) => pages[pageNumber - 1],
+    }),
+    [settings, activeProfile, keys, pages]
+  );
+
+  // ── Handlers ────────────────────────────────────────────────
+
+  const handlePdfRendered = useCallback((name: string, rendered: string[]) => {
+    const base = name.replace(/\.[^.]+$/, '');
+    setFileName(base);
+    setDeckName(base);
+    setPages(rendered);
+    setSelected(new Array(rendered.length).fill(true));
+    setCardOverrides({});
+    setInstructions({});
     setStep('configure');
   }, []);
 
-  /** Toggle la sélection d'une page */
   function togglePage(index: number) {
     setSelected((prev) => prev.map((v, i) => (i === index ? !v : v)));
   }
 
-  /** Lance la génération */
+  function toggleWindow(windowIndex: number, value: boolean) {
+    const target = windows.find((w) => w.index === windowIndex);
+    if (!target) return;
+    const inWindow = new Set(target.allPageNumbers.map((n) => n - 1));
+    setSelected((prev) => prev.map((v, i) => (inWindow.has(i) ? value : v)));
+  }
+
+  function setCardOverride(windowIndex: number, value: number | null) {
+    setCardOverrides((prev) => {
+      const next = { ...prev };
+      if (value === null) delete next[windowIndex];
+      else next[windowIndex] = value;
+      return next;
+    });
+  }
+
+  function setInstruction(windowIndex: number, value: string) {
+    setInstructions((prev) => {
+      const next = { ...prev };
+      if (!value.trim()) delete next[windowIndex];
+      else next[windowIndex] = value;
+      return next;
+    });
+  }
+
   async function handleGenerate() {
+    if (chunks.length === 0) return;
+
     setError(null);
+    setCardsByChunk({});
+    setUsage(EMPTY_USAGE);
+    setStep('generating');
     setGenerating(true);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      // Collecter les images des pages sélectionnées
-      const selectedIndices = selected
-        .map((v, i) => (v ? i : -1))
-        .filter((i) => i >= 0);
-      const selectedImages = selectedIndices.map((i) => pages[i]);
-
-      if (selectedImages.length === 0) {
-        setError('Aucune page sélectionnée.');
-        setGenerating(false);
-        return;
-      }
-
-      const total = computeTotalCards();
-      const batchOverrides = resolveBatchOverrides(selectedIndices);
-      const batchFocus = resolveBatchFocus(selectedIndices);
-
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          images: selectedImages,
-          config: {
-            mode: 'cards' as GenerationMode,
-            cardCount: total,
-            quizCount: 0,
-            difficulty,
-            selectedPages: selectedIndices.map((i) => i + 1), // 1-indexed
-          },
-          settings,
-          chunkCardOverrides: batchOverrides,
-          chunkFocusOverrides: batchFocus,
-        }),
+      const result = await runGeneration({
+        ...runContext(),
+        chunks,
+        concurrency: settings.concurrency,
+        signal: controller.signal,
+        onProgress: setStatuses,
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erreur de génération');
+      setCardsByChunk(result.cardsByChunk);
+      setUsage(result.usage);
+      setStatuses(result.statuses);
 
-      setCards(data.cards || []);
-      setCostUsd(data.usage?.costUsd || 0);
-      setStep('results');
+      const allGood = result.statuses.every((s) => s.phase === 'done');
+      const produced = flattenCards(result.cardsByChunk);
+
+      // On ne saute aux résultats que si tout a abouti : sinon l'utilisateur
+      // doit pouvoir voir ce qui a échoué et relancer les chunks concernés.
+      if (allGood && produced.length > 0) {
+        setCards(produced);
+        setStep('results');
+      }
     } catch (err) {
-      setError((err as Error).message);
+      setError(err instanceof Error ? err.message : 'Erreur de génération.');
     } finally {
       setGenerating(false);
+      abortRef.current = null;
     }
   }
 
-  /** Exporte les cartes sélectionnées en .txt (format Anki) */
+  /** Relance d'un seul chunk, sans refaire les autres. */
+  async function handleRetryChunk(chunkIndex: number) {
+    const chunk = chunks.find((c) => c.index === chunkIndex);
+    if (!chunk) return;
+
+    setRetrying(chunkIndex);
+    setStatuses((prev) =>
+      prev.map((s) => (s.index === chunkIndex ? { ...s, phase: 'running', error: undefined } : s))
+    );
+
+    try {
+      const result = await retryChunk(chunk, runContext());
+
+      setCardsByChunk((prev) => ({ ...prev, [chunkIndex]: result.cards }));
+      setUsage((prev) => ({
+        inputTokens: prev.inputTokens + result.usage.inputTokens,
+        outputTokens: prev.outputTokens + result.usage.outputTokens,
+        costUsd: prev.costUsd + result.usage.costUsd,
+      }));
+      setStatuses((prev) =>
+        prev.map((s) =>
+          s.index === chunkIndex
+            ? {
+                ...s,
+                phase: 'done',
+                obtained: result.obtained,
+                toppedUp: result.toppedUp,
+                warnings: result.warnings,
+                error: undefined,
+              }
+            : s
+        )
+      );
+    } catch (err) {
+      setStatuses((prev) =>
+        prev.map((s) =>
+          s.index === chunkIndex
+            ? { ...s, phase: 'error', error: err instanceof Error ? err.message : 'Erreur.' }
+            : s
+        )
+      );
+    } finally {
+      setRetrying(null);
+    }
+  }
+
+  function goToResults() {
+    setCards(flattenCards(cardsByChunk));
+    setStep('results');
+  }
+
   async function handleExport() {
     setExporting(true);
+    setError(null);
     try {
-      const res = await fetch('/api/export', {
+      const response = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cards: cards.filter((c) => c.selected),
-          deckName: deckName || fileName.replace(/\.[^.]+$/, ''),
+          deckName: deckName || fileName,
           exportTags: settings.exportTags,
         }),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Export impossible (${response.status}).`);
       }
 
-      const blob = await res.blob();
-      downloadBlob(blob, `${deckName.replace(/\.[^.]+$/, '')}.txt`);
+      downloadBlob(await response.blob(), `${deckName || fileName || 'AnkiDocs'}.txt`);
     } catch (err) {
-      setError((err as Error).message);
+      setError(err instanceof Error ? err.message : 'Export impossible.');
     } finally {
       setExporting(false);
     }
   }
 
-  function handleChunkOverride(chunkIndex: number, value: number | null) {
-    setChunkCardOverrides((prev) => {
-      const next = { ...prev };
-      if (value === null) delete next[chunkIndex];
-      else next[chunkIndex] = value;
-      return next;
-    });
-  }
-
-  function handleChunkFocus(chunkIndex: number, value: string) {
-    setChunkFocusOverrides((prev) => {
-      const next = { ...prev };
-      if (!value.trim()) delete next[chunkIndex];
-      else next[chunkIndex] = value;
-      return next;
-    });
-  }
-
-  /** Retour au début */
   function handleReset() {
+    abortRef.current?.abort();
     setStep('upload');
     setPages([]);
     setSelected([]);
     setCards([]);
-    setCostUsd(0);
+    setCardsByChunk({});
+    setStatuses([]);
+    setUsage(EMPTY_USAGE);
+    setCardOverrides({});
+    setInstructions({});
     setError(null);
-    setChunkCardOverrides({});
-    setChunkFocusOverrides({});
   }
 
-  // ── Rendu ──────────────────────────────────────────────────
+  // ── Rendu ───────────────────────────────────────────────────
 
-  const selectedCount = selected.filter(Boolean).length;
-
-  /**
-   * Total de cartes estimé en itérant sur les chunks visuels (basés sur pages.length),
-   * en ne comptant que ceux qui ont au moins une page sélectionnée.
-   */
-  function computeTotalCards(): number {
-    const pagesPerBatch = settings.pagesPerBatch;
-    const uiChunkCount = Math.ceil(pages.length / pagesPerBatch);
-    let total = 0;
-    for (let i = 0; i < uiChunkCount; i++) {
-      const start = i * pagesPerBatch;
-      const end = Math.min(start + pagesPerBatch, pages.length);
-      const hasSelected = selected.slice(start, end).some(Boolean);
-      if (hasSelected) {
-        total += chunkCardOverrides[i] ?? settings.cardsPerChunk;
-      }
-    }
-    return total;
-  }
-
-  /**
-   * Convertit les overrides indexés par chunk visuel en overrides indexés par
-   * batch séquentiel (basé sur les pages sélectionnées uniquement).
-   */
-  function resolveBatchOverrides(selectedIndices: number[]): Record<number, number> {
-    const pagesPerBatch = settings.pagesPerBatch;
-    const result: Record<number, number> = {};
-    for (let batchIdx = 0; batchIdx * pagesPerBatch < selectedIndices.length; batchIdx++) {
-      const firstPage = selectedIndices[batchIdx * pagesPerBatch];
-      const uiChunkIdx = Math.floor(firstPage / pagesPerBatch);
-      if (chunkCardOverrides[uiChunkIdx] !== undefined) {
-        result[batchIdx] = chunkCardOverrides[uiChunkIdx];
-      }
-    }
-    return result;
-  }
-
-  /**
-   * Idem que resolveBatchOverrides, mais pour les consignes libres par chunk :
-   * mappe les consignes indexées par chunk visuel vers l'index de batch serveur.
-   */
-  function resolveBatchFocus(selectedIndices: number[]): Record<number, string> {
-    const pagesPerBatch = settings.pagesPerBatch;
-    const result: Record<number, string> = {};
-    for (let batchIdx = 0; batchIdx * pagesPerBatch < selectedIndices.length; batchIdx++) {
-      const firstPage = selectedIndices[batchIdx * pagesPerBatch];
-      const uiChunkIdx = Math.floor(firstPage / pagesPerBatch);
-      if (chunkFocusOverrides[uiChunkIdx] !== undefined) {
-        result[batchIdx] = chunkFocusOverrides[uiChunkIdx];
-      }
-    }
-    return result;
-  }
-
-  const totalCards = computeTotalCards();
+  const previewWindow = previewIndex === null ? null : windows.find((w) => w.index === previewIndex);
+  const currentStepIndex = STEPS.findIndex((s) => s.id === step);
+  const producedCount = Object.values(cardsByChunk).reduce((n, list) => n + list.length, 0);
+  const failedCount = statuses.filter((s) => s.phase === 'error').length;
 
   return (
     <main className="min-h-screen px-4 py-10 max-w-6xl mx-auto">
-      {/* Header */}
       <header className="flex items-center justify-between mb-10">
         <div className="flex-1" />
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight">
             <span className="text-[var(--accent)]">Anki</span>Docs
           </h1>
-          <p className="text-[var(--text-muted)] text-sm mt-1">
-            PDF → Cartes Anki via IA vision
-          </p>
+          <p className="text-[var(--text-muted)] text-sm mt-1">PDF → cartes Anki via IA vision</p>
         </div>
         <div className="flex-1 flex justify-end">
           <button
@@ -263,47 +313,73 @@ export default function Home() {
         <SettingsPanel
           settings={settings}
           onUpdate={updateSettings}
+          keys={keys}
           onClose={() => setShowSettings(false)}
         />
       )}
 
-      {/* Barre de progression */}
+      {previewWindow && (
+        <PromptPreview
+          title={`Prompt du chunk ${previewWindow.index + 1}`}
+          subtitle={`Profil « ${activeProfile.name} » · ${previewWindow.pageNumbers.length} page(s) · ${previewWindow.cardCount} carte(s) demandée(s)`}
+          prompt={buildChunkPrompt({
+            profile: toSpec(activeProfile),
+            params: {
+              difficulty: settings.difficulty,
+              language: settings.language,
+              globalInstructions: settings.globalInstructions,
+            },
+            chunk: {
+              pageNumbers: previewWindow.pageNumbers,
+              cardCount: previewWindow.cardCount,
+              instructions: previewWindow.instructions,
+            },
+          })}
+          onClose={() => setPreviewIndex(null)}
+        />
+      )}
+
+      {/* Étapes */}
       <div className="flex items-center justify-center gap-3 mb-8">
-        {(['upload', 'configure', 'results'] as const).map((s, i) => {
-          const labels = ['Import', 'Configurer', 'Résultats'];
-          const current = ['upload', 'configure', 'results'].indexOf(step);
-          return (
-            <div key={s} className="flex items-center gap-3">
-              <div className={`flex items-center gap-2 ${i <= current ? 'text-[var(--text)]' : 'text-[var(--text-muted)]'}`}>
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
-                  i <= current ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-card)] border border-[var(--border)]'
-                }`}>
-                  {i + 1}
-                </div>
-                <span className="text-sm hidden sm:inline">{labels[i]}</span>
+        {STEPS.map((s, i) => (
+          <div key={s.id} className="flex items-center gap-3">
+            <div
+              className={`flex items-center gap-2 ${
+                i <= currentStepIndex ? 'text-[var(--text)]' : 'text-[var(--text-muted)]'
+              }`}
+            >
+              <div
+                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
+                  i <= currentStepIndex
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'bg-[var(--bg-card)] border border-[var(--border)]'
+                }`}
+              >
+                {i + 1}
               </div>
-              {i < 2 && <div className={`w-10 h-px ${i < current ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'}`} />}
+              <span className="text-sm hidden sm:inline">{s.label}</span>
             </div>
-          );
-        })}
+            {i < STEPS.length - 1 && (
+              <div
+                className={`w-8 h-px ${i < currentStepIndex ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'}`}
+              />
+            )}
+          </div>
+        ))}
       </div>
 
-      {/* Erreur */}
       {error && (
         <div className="mb-6 p-4 rounded-xl border border-[var(--danger)] bg-[var(--danger-dim)] text-[var(--danger)] text-sm">
           {error}
         </div>
       )}
 
-      {/* ── Étape 1 : Upload ── */}
       {step === 'upload' && (
-        <PdfUploader onComplete={handlePdfRendered} />
+        <PdfUploader onComplete={handlePdfRendered} renderScale={settings.renderScale} />
       )}
 
-      {/* ── Étape 2 : Configuration ── */}
       {step === 'configure' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Colonne gauche : pages (2/3) */}
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">{fileName}</h2>
@@ -317,65 +393,87 @@ export default function Home() {
             <PageSelector
               pages={pages}
               selected={selected}
-              pagesPerChunk={settings.pagesPerBatch}
-              defaultCardsPerChunk={settings.cardsPerChunk}
-              chunkCardOverrides={chunkCardOverrides}
-              chunkFocusOverrides={chunkFocusOverrides}
+              windows={windows}
+              pagesPerChunk={settings.pagesPerChunk}
               onToggle={togglePage}
-              onChunkSizeChange={(val) => updateSettings({ pagesPerBatch: val })}
-              onChunkOverride={handleChunkOverride}
-              onChunkFocus={handleChunkFocus}
+              onToggleWindow={toggleWindow}
+              onChunkSizeChange={(n) => updateSettings({ pagesPerChunk: n })}
+              onCardOverride={setCardOverride}
+              onInstructions={setInstruction}
+              onPreviewPrompt={setPreviewIndex}
             />
           </div>
 
-          {/* Colonne droite : config + coût (1/3) */}
           <div className="lg:sticky lg:top-6 lg:self-start">
             <GenerationPanel
-              selectedPageCount={selectedCount}
-              pagesPerChunk={settings.pagesPerBatch}
-              cardsPerChunk={settings.cardsPerChunk}
-              totalCards={totalCards}
-              difficulty={difficulty}
-              provider={settings.provider}
-              model={settings.model}
-              onCardsPerChunkChange={(val) => updateSettings({ cardsPerChunk: val })}
-              onDifficultyChange={setDifficulty}
+              settings={settings}
+              onUpdate={updateSettings}
+              chunkCount={chunks.length}
+              pageCount={sumPages(chunks)}
+              totalCards={sumCards(chunks)}
+              keyStatus={keys.status(settings.provider)}
               onGenerate={handleGenerate}
-              loading={generating}
+              onOpenSettings={() => setShowSettings(true)}
+              loading={generating || !settingsReady || !keys.hydrated}
             />
           </div>
         </div>
       )}
 
-      {/* ── Étape 3 : Résultats ── */}
+      {step === 'generating' && (
+        <div className="max-w-2xl mx-auto space-y-4">
+          <GenerationProgress
+            statuses={statuses}
+            running={generating}
+            onCancel={() => abortRef.current?.abort()}
+            onRetry={handleRetryChunk}
+            retrying={retrying}
+          />
+
+          {!generating && (
+            <div className="flex gap-3">
+              <button
+                onClick={() => setStep('configure')}
+                className="px-5 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--text-muted)] hover:bg-[var(--bg-card)]"
+              >
+                ← Configuration
+              </button>
+              <button
+                onClick={goToResults}
+                disabled={producedCount === 0}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${
+                  producedCount === 0
+                    ? 'bg-[var(--bg-hover)] text-[var(--text-muted)] cursor-not-allowed'
+                    : 'bg-[var(--accent)] text-white hover:brightness-110'
+                }`}
+              >
+                {producedCount === 0
+                  ? 'Aucune carte générée'
+                  : `Voir les ${producedCount} carte${producedCount !== 1 ? 's' : ''}${
+                      failedCount > 0 ? ` (${failedCount} chunk en échec)` : ''
+                    }`}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {step === 'results' && (
-      <CardResults
-        cards={cards}
-        costUsd={costUsd}
-        deckName={deckName}
-        onDeckNameChange={setDeckName}
-        onUpdate={setCards}
-        onExport={handleExport}
-        onReset={handleReset}
-        exporting={exporting}
-      />
+        <CardResults
+          cards={cards}
+          costUsd={usage.costUsd}
+          deckName={deckName}
+          onDeckNameChange={setDeckName}
+          onUpdate={setCards}
+          onExport={handleExport}
+          onReset={handleReset}
+          exporting={exporting}
+        />
       )}
     </main>
   );
 }
 
-// ─── Utilitaires ─────────────────────────────────────────────
-
-/** Hash simple côté client (pour identifier un PDF entre sessions) */
-async function computeHash(input: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(input);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
-}
-
-/** Télécharge un Blob comme fichier */
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
