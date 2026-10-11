@@ -78,7 +78,8 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
     onUpdate(cards.map((c) => ({ ...c, selected: val })));
   }
 
-  function addManualCard() {
+  /** Insère une carte vide à la position `at` (par défaut à la fin) et l'ouvre en édition. */
+  function addManualCard(at: number = cards.length) {
     const newCard: Card = {
       id: `manual-${Date.now()}`,
       question: '',
@@ -92,7 +93,7 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
       backImages: [],
       cardMode: 'basic',
     };
-    onUpdate([...cards, newCard]);
+    onUpdate([...cards.slice(0, at), newCard, ...cards.slice(at)]);
     setEditingId(newCard.id);
   }
 
@@ -147,14 +148,17 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
       {/* Liste des cartes */}
       {/* Le conteneur reçoit le drop : on peut lâcher sur une carte, sur l'indicateur ou dans un interstice. */}
       <div
-        className="space-y-2"
         onDragOver={(e) => { if (dragIndex !== null) e.preventDefault(); }}
         onDrop={(e) => { e.preventDefault(); handleDrop(); }}
         onDragLeave={handleDragLeaveList}
       >
         {cards.map((card, index) => (
           <React.Fragment key={card.id}>
-            {visibleSlot === index && <DropIndicator />}
+            <CardGap
+              showDrop={visibleSlot === index}
+              canInsert={dragIndex === null}
+              onInsert={() => addManualCard(index)}
+            />
             <CardItem
               card={card}
               index={index}
@@ -173,12 +177,13 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
             />
           </React.Fragment>
         ))}
-        {visibleSlot === cards.length && <DropIndicator />}
+        {/* Après la dernière carte, le bouton ci-dessous suffit pour insérer. */}
+        <CardGap showDrop={visibleSlot === cards.length} canInsert={false} onInsert={() => {}} />
       </div>
 
       {/* Ajouter une carte manuellement */}
       <button
-        onClick={addManualCard}
+        onClick={() => addManualCard()}
         className="w-full py-2.5 rounded-xl border border-dashed border-[var(--border)] text-sm text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
       >
         + Ajouter une carte manuellement
@@ -221,6 +226,35 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
           }
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Interstice entre deux cartes ────────────────────────────
+
+/**
+ * Espace entre deux cartes. Pendant un drag, il affiche l'indicateur de dépôt ;
+ * sinon, au survol, un bouton « + » permet d'insérer une carte à cet endroit.
+ */
+function CardGap({ showDrop, canInsert, onInsert }: { showDrop: boolean; canInsert: boolean; onInsert: () => void }) {
+  if (showDrop) {
+    return <div className="py-2"><DropIndicator /></div>;
+  }
+  return (
+    <div className="relative h-2">
+      {canInsert && (
+        // Zone de survol plus haute que l'interstice pour être facile à atteindre.
+        <div className="group absolute inset-x-0 -top-1.5 -bottom-1.5 z-10 flex items-center justify-center">
+          <div className="absolute inset-x-4 top-1/2 h-px bg-[var(--accent)] opacity-0 group-hover:opacity-60 group-focus-within:opacity-60 transition-opacity" />
+          <button
+            onClick={onInsert}
+            title="Insérer une carte ici"
+            className="relative w-5 h-5 rounded-full bg-[var(--accent)] text-white text-xs leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+          >
+            +
+          </button>
+        </div>
+      )}
     </div>
   );
 }
