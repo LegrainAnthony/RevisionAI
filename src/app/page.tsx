@@ -15,6 +15,7 @@ import {
   runGeneration,
   type RunContext,
 } from '@/engine/generation/generationRunner';
+import { extendSelection, type SelectionAnchor } from '@/engine/generation/pageSelection';
 import { buildChunkPrompt } from '@/engine/ai/promptBuilder';
 import { useSettings } from '@/hooks/useSettings';
 import { useApiKeys } from '@/hooks/useApiKeys';
@@ -51,6 +52,8 @@ export default function Home() {
   const [deckName, setDeckName] = useState('Default');
   const [pages, setPages] = useState<string[]>([]);
   const [selected, setSelected] = useState<boolean[]>([]);
+  /** Dernier clic simple (page ou chunk) — point de départ d'un Maj+clic */
+  const anchorRef = useRef<SelectionAnchor | null>(null);
 
   // ── Réglages par chunk, indexés par index de fenêtre (identité stable) ──
   const [cardOverrides, setCardOverrides] = useState<Record<number, number>>({});
@@ -113,20 +116,32 @@ export default function Home() {
     setDeckName(base);
     setPages(rendered);
     setSelected(new Array(rendered.length).fill(true));
+    anchorRef.current = null;
     setCardOverrides({});
     setInstructions({});
     setStep('configure');
   }, []);
 
-  function togglePage(index: number) {
-    setSelected((prev) => prev.map((v, i) => (i === index ? !v : v)));
+  /** Applique `value` aux pages [from, to] — ou, avec Maj, de l'ancre jusqu'à elles. */
+  function applySelection(from: number, to: number, value: boolean, range: boolean) {
+    const anchor = anchorRef.current;
+    if (range && anchor) {
+      setSelected((prev) => extendSelection(prev, anchor, from, to));
+      return;
+    }
+    anchorRef.current = { from, to, value };
+    setSelected((prev) => prev.map((v, i) => (i >= from && i <= to ? value : v)));
   }
 
-  function toggleWindow(windowIndex: number, value: boolean) {
+  function togglePage(index: number, range = false) {
+    applySelection(index, index, !selected[index], range);
+  }
+
+  function toggleWindow(windowIndex: number, value: boolean, range = false) {
     const target = windows.find((w) => w.index === windowIndex);
     if (!target) return;
-    const inWindow = new Set(target.allPageNumbers.map((n) => n - 1));
-    setSelected((prev) => prev.map((v, i) => (inWindow.has(i) ? value : v)));
+    const pageIdx = target.allPageNumbers.map((n) => n - 1);
+    applySelection(pageIdx[0], pageIdx[pageIdx.length - 1], value, range);
   }
 
   function setCardOverride(windowIndex: number, value: number | null) {

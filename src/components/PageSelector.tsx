@@ -1,5 +1,6 @@
 'use client';
 
+import type { MouseEvent } from 'react';
 import type { ChunkWindow } from '@/engine/generation/chunkPlanner';
 import { LIMITS } from '@/shared/limits';
 
@@ -10,8 +11,9 @@ interface Props {
   /** Fenêtres calculées par `planWindows` — même découpage que celui envoyé à l'IA */
   windows: ChunkWindow[];
   pagesPerChunk: number;
-  onToggle: (pageIndex: number) => void;
-  onToggleWindow: (windowIndex: number, value: boolean) => void;
+  /** `range` = Maj enfoncée : étend la dernière action jusqu'à cette page */
+  onToggle: (pageIndex: number, range: boolean) => void;
+  onToggleWindow: (windowIndex: number, value: boolean, range: boolean) => void;
   onChunkSizeChange: (n: number) => void;
   onCardOverride: (windowIndex: number, value: number | null) => void;
   onInstructions: (windowIndex: number, value: string) => void;
@@ -50,6 +52,9 @@ export function PageSelector({
           </p>
           <p className="text-xs text-[var(--text-muted)]">
             {activeWindows.length} chunk{activeWindows.length !== 1 ? 's' : ''} · {activeWindows.length} appel{activeWindows.length !== 1 ? 's' : ''} à l’IA
+          </p>
+          <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
+            Astuce : Maj+clic pour (dé)cocher toute une plage de pages ou de chunks
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -90,6 +95,11 @@ export function PageSelector({
   );
 }
 
+/** Sans ça, un Maj+clic surligne le texte entre les deux clics. */
+function preventShiftTextSelection(e: MouseEvent) {
+  if (e.shiftKey) e.preventDefault();
+}
+
 function ChunkCard({
   window: w,
   pages,
@@ -103,8 +113,8 @@ function ChunkCard({
   window: ChunkWindow;
   pages: string[];
   selected: boolean[];
-  onToggle: (i: number) => void;
-  onToggleWindow: (i: number, v: boolean) => void;
+  onToggle: (i: number, range: boolean) => void;
+  onToggleWindow: (i: number, v: boolean, range: boolean) => void;
   onCardOverride: (i: number, v: number | null) => void;
   onInstructions: (i: number, v: string) => void;
   onPreviewPrompt: (i: number) => void;
@@ -131,7 +141,9 @@ function ChunkCard({
             Chunk {w.index + 1}
           </span>
           <button
-            onClick={() => onToggleWindow(w.index, !active)}
+            onClick={(e) => onToggleWindow(w.index, !active, e.shiftKey)}
+            onMouseDown={preventShiftTextSelection}
+            title="Maj+clic : appliquer à tous les chunks depuis le dernier clic"
             className="text-[10px] text-[var(--text-muted)] hover:text-[var(--accent)] underline decoration-dotted underline-offset-2"
           >
             {active ? 'tout décocher' : 'tout cocher'}
@@ -180,7 +192,9 @@ function ChunkCard({
           return (
             <button
               key={pageNumber}
-              onClick={() => onToggle(i)}
+              onClick={(e) => onToggle(i, e.shiftKey)}
+              onMouseDown={preventShiftTextSelection}
+              title={`Page ${pageNumber} — Maj+clic pour une plage`}
               className={`relative rounded-lg overflow-hidden border-2 aspect-[3/4] ${
                 selected[i] ? 'border-[var(--accent)]/60' : 'border-transparent opacity-25 grayscale'
               }`}
