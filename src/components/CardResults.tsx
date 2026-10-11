@@ -260,7 +260,8 @@ function CardItem({
 }: CardItemProps) {
   return (
     <div
-      draggable
+      // En édition, la carte n'est pas déplaçable : sinon sélectionner du texte la ferait glisser.
+      draggable={!isEditing}
       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(); }}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
@@ -274,7 +275,9 @@ function CardItem({
     >
       <div className="flex gap-3">
         <div className="mt-0.5 flex-shrink-0 flex flex-col items-center gap-1.5">
-          <span className="text-[var(--text-muted)] cursor-grab active:cursor-grabbing select-none text-xs leading-none">⠿</span>
+          <span className={`text-[var(--text-muted)] select-none text-xs leading-none ${
+            isEditing ? 'opacity-30 cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'
+          }`}>⠿</span>
           <button
             onClick={onToggle}
             className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
