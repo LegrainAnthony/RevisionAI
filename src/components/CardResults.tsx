@@ -20,31 +20,44 @@ interface Props {
 export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpdate, onExport, onReset, exporting }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  // Emplacement d'insertion : 0 = avant la première carte, cards.length = après la dernière.
+  const [dropSlot, setDropSlot] = useState<number | null>(null);
   const selectedCount = cards.filter((c) => c.selected).length;
+
+  // Un emplacement juste avant ou juste après la carte déplacée ne change rien : pas d'indicateur.
+  const visibleSlot =
+    dragIndex !== null && dropSlot !== null && dropSlot !== dragIndex && dropSlot !== dragIndex + 1
+      ? dropSlot
+      : null;
 
   function handleDragStart(index: number) {
     setDragIndex(index);
   }
 
-  function handleDragOver(index: number) {
-    if (dragIndex === null || dragIndex === index) return;
-    setDragOverIndex(index);
+  function handleDragOver(index: number, e: React.DragEvent) {
+    if (dragIndex === null) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const before = e.clientY < rect.top + rect.height / 2;
+    setDropSlot(before ? index : index + 1);
   }
 
-  function handleDrop(index: number) {
-    if (dragIndex === null || dragIndex === index) return;
-    const reordered = [...cards];
-    const [moved] = reordered.splice(dragIndex, 1);
-    reordered.splice(index, 0, moved);
-    onUpdate(reordered);
-    setDragIndex(null);
-    setDragOverIndex(null);
+  function handleDrop() {
+    if (dragIndex !== null && visibleSlot !== null) {
+      const reordered = [...cards];
+      const [moved] = reordered.splice(dragIndex, 1);
+      reordered.splice(visibleSlot > dragIndex ? visibleSlot - 1 : visibleSlot, 0, moved);
+      onUpdate(reordered);
+    }
+    handleDragEnd();
+  }
+
+  function handleDragLeaveList(e: React.DragEvent) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropSlot(null);
   }
 
   function handleDragEnd() {
     setDragIndex(null);
-    setDragOverIndex(null);
+    setDropSlot(null);
   }
 
   function toggleCard(id: string) {
@@ -132,28 +145,35 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
       </div>
 
       {/* Liste des cartes */}
-      <div className="space-y-2">
+      {/* Le conteneur reçoit le drop : on peut lâcher sur une carte, sur l'indicateur ou dans un interstice. */}
+      <div
+        className="space-y-2"
+        onDragOver={(e) => { if (dragIndex !== null) e.preventDefault(); }}
+        onDrop={(e) => { e.preventDefault(); handleDrop(); }}
+        onDragLeave={handleDragLeaveList}
+      >
         {cards.map((card, index) => (
-          <CardItem
-            key={card.id}
-            card={card}
-            index={index}
-            isEditing={editingId === card.id}
-            isDragging={dragIndex === index}
-            isDragOver={dragOverIndex === index}
-            onToggle={() => toggleCard(card.id)}
-            onToggleMode={() => toggleMode(card.id)}
-            onEdit={() => setEditingId(card.id)}
-            onDoneEditing={() => setEditingId(null)}
-            onUpdateField={(field, val) => updateCard(card.id, field, val)}
-            onAddImage={(side, b64) => addImage(card.id, side, b64)}
-            onRemoveImage={(side, idx) => removeImage(card.id, side, idx)}
-            onDragStart={() => handleDragStart(index)}
-            onDragOver={() => handleDragOver(index)}
-            onDrop={() => handleDrop(index)}
-            onDragEnd={handleDragEnd}
-          />
+          <React.Fragment key={card.id}>
+            {visibleSlot === index && <DropIndicator />}
+            <CardItem
+              card={card}
+              index={index}
+              isEditing={editingId === card.id}
+              isDragging={dragIndex === index}
+              onToggle={() => toggleCard(card.id)}
+              onToggleMode={() => toggleMode(card.id)}
+              onEdit={() => setEditingId(card.id)}
+              onDoneEditing={() => setEditingId(null)}
+              onUpdateField={(field, val) => updateCard(card.id, field, val)}
+              onAddImage={(side, b64) => addImage(card.id, side, b64)}
+              onRemoveImage={(side, idx) => removeImage(card.id, side, idx)}
+              onDragStart={() => handleDragStart(index)}
+              onDragOver={(e) => handleDragOver(index, e)}
+              onDragEnd={handleDragEnd}
+            />
+          </React.Fragment>
         ))}
+        {visibleSlot === cards.length && <DropIndicator />}
       </div>
 
       {/* Ajouter une carte manuellement */}
@@ -205,6 +225,16 @@ export function CardResults({ cards, costUsd, deckName, onDeckNameChange, onUpda
   );
 }
 
+// ─── Indicateur d'insertion (drag & drop) ────────────────────
+
+function DropIndicator() {
+  return (
+    <div className="h-10 rounded-xl border-2 border-dashed border-[var(--accent)] bg-[var(--accent-dim)] flex items-center justify-center text-[var(--accent)] text-lg font-semibold select-none pointer-events-none">
+      +
+    </div>
+  );
+}
+
 // ─── Composant carte individuelle ────────────────────────────
 
 interface CardItemProps {
@@ -212,7 +242,6 @@ interface CardItemProps {
   index: number;
   isEditing: boolean;
   isDragging: boolean;
-  isDragOver: boolean;
   onToggle: () => void;
   onToggleMode: () => void;
   onEdit: () => void;
@@ -221,27 +250,23 @@ interface CardItemProps {
   onAddImage: (side: 'front' | 'back', base64: string) => void;
   onRemoveImage: (side: 'front' | 'back', index: number) => void;
   onDragStart: () => void;
-  onDragOver: () => void;
-  onDrop: () => void;
+  onDragOver: (e: React.DragEvent) => void;
   onDragEnd: () => void;
 }
 
 function CardItem({
-  card, isEditing, isDragging, isDragOver, onToggle, onToggleMode, onEdit, onDoneEditing,
-  onUpdateField, onAddImage, onRemoveImage, onDragStart, onDragOver, onDrop, onDragEnd,
+  card, isEditing, isDragging, onToggle, onToggleMode, onEdit, onDoneEditing,
+  onUpdateField, onAddImage, onRemoveImage, onDragStart, onDragOver, onDragEnd,
 }: CardItemProps) {
   return (
     <div
       draggable
       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(); }}
-      onDragOver={(e) => { e.preventDefault(); onDragOver(); }}
-      onDrop={(e) => { e.preventDefault(); onDrop(); }}
+      onDragOver={onDragOver}
       onDragEnd={onDragEnd}
       className={`rounded-xl border p-4 transition-all ${
         isDragging
           ? 'opacity-40 scale-[0.98]'
-          : isDragOver
-          ? 'border-[var(--accent)] bg-[var(--accent-dim)]'
           : card.selected
           ? 'border-[var(--border)] bg-[var(--bg-card)]'
           : 'border-transparent bg-[var(--bg-card)] opacity-40'
